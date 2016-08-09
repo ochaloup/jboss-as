@@ -33,6 +33,7 @@ import static org.jboss.as.connector.subsystems.common.pool.Constants.IDLETIMEOU
 import static org.jboss.as.connector.subsystems.common.pool.Constants.INITIAL_POOL_SIZE;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.MAX_POOL_SIZE;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.MIN_POOL_SIZE;
+import static org.jboss.as.connector.subsystems.common.pool.Constants.POOL_FAIR;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.POOL_FLUSH_STRATEGY;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.POOL_PREFILL;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.POOL_USE_STRICT_MIN;
@@ -194,6 +195,8 @@ public class IronJacamarResourceCreator {
                 setAttribute(model, POOL_FLUSH_STRATEGY, pool.getFlushStrategy().name());
             setAttribute(model, POOL_PREFILL, pool.isPrefill());
 
+            setAttribute(model, POOL_FAIR, pool.isFair());
+
             if (connDef.isXa()) {
                 assert connDef.getPool() instanceof XaPool;
                 XaPool xaPool = (XaPool) connDef.getPool();
@@ -348,26 +351,26 @@ public class IronJacamarResourceCreator {
 
     }
 
-    private Resource getIronJacamarResource(AS7MetadataRepository mdr) {
+    private Resource getIronJacamarResource(AS7MetadataRepository mdr, String name) {
 
         final Resource resource = Resource.Factory.create();
 
-        for (String name : mdr.getResourceAdaptersWithIronJacamarMetadata()) {
-            addResourceAdapter(resource, name, mdr.getIronJacamarMetaData(name));
-        }
+        Activation activation = mdr.getIronJacamarMetaData(name);
+        if (activation != null)
+            addResourceAdapter(resource, name, activation);
 
         return resource;
 
 
     }
 
-    public void execute(Resource parentResource, AS7MetadataRepository mdr) {
+    public void execute(Resource parentResource, AS7MetadataRepository mdr, String name) {
 
 
         // Get the iron-jacamar resource
         final IronJacamarResource ironJacamarResource = new IronJacamarResource();
         // Replace the current model with an updated one
-        final Resource storeModel = getIronJacamarResource(mdr);
+        final Resource storeModel = getIronJacamarResource(mdr, name);
 
         ironJacamarResource.update(storeModel);
         PathElement ijPe = PathElement.pathElement(Constants.IRONJACAMAR_NAME, Constants.IRONJACAMAR_NAME);

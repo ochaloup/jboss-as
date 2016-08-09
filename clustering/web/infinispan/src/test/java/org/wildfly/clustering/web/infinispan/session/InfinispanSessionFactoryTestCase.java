@@ -34,10 +34,9 @@ import org.wildfly.clustering.web.session.ImmutableSession;
 import org.wildfly.clustering.web.session.ImmutableSessionAttributes;
 import org.wildfly.clustering.web.session.ImmutableSessionMetaData;
 import org.wildfly.clustering.web.session.Session;
-import org.wildfly.clustering.web.session.SessionAttributes;
-import org.wildfly.clustering.web.session.SessionMetaData;
 
 /**
+ * Unit test for {@link InfinispanSessionFactory}.
  * @author Paul Ferraro
  */
 public class InfinispanSessionFactoryTestCase {
@@ -92,8 +91,6 @@ public class InfinispanSessionFactoryTestCase {
         assertNotNull(existingSessionResult);
         assertSame(metaData, existingSessionResult.getKey());
         assertSame(attributes, existingSessionResult.getValue());
-
-        verify(this.metaDataFactory).remove(missingAttributesSessionId);
     }
 
     @Test
@@ -136,7 +133,7 @@ public class InfinispanSessionFactoryTestCase {
         Object localContext = new Object();
         InfinispanSessionMetaData<Object> metaDataValue = new InfinispanSessionMetaData<>(creationMetaData, accessMetaData, new AtomicReference<>(localContext));
         Object attributesValue = new Object();
-        SessionMetaData metaData = mock(SessionMetaData.class);
+        InvalidatableSessionMetaData metaData = mock(InvalidatableSessionMetaData.class);
         SessionAttributes attributes = mock(SessionAttributes.class);
         String id = "id";
 

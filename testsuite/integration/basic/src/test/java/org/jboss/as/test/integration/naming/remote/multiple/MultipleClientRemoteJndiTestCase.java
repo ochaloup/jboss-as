@@ -8,7 +8,7 @@ import org.jboss.arquillian.container.test.api.OperateOnDeployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.arquillian.test.api.ArquillianResource;
-import org.jboss.as.naming.JndiPermission;
+import org.wildfly.naming.java.permission.JndiPermission;
 import org.jboss.as.test.integration.common.HttpRequest;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
@@ -77,8 +77,6 @@ public class MultipleClientRemoteJndiTestCase {
         return ShrinkWrap.create(WebArchive.class, "binder.war")
                 .addClasses(BindRmiServlet.class, MyObject.class)
                 .setWebXML(MultipleClientRemoteJndiTestCase.class.getPackage(), "web.xml")
-                // dependency to org.jboss.as.naming module is used to grant JndiPermission
-                .addAsManifestResource(new StringAsset("Dependencies: org.jboss.as.naming\n"), "MANIFEST.MF")
                 // BindRmiServlet binds java:jboss/exported/loc/stub
                 .addAsManifestResource(createPermissionsXmlAsset(new JndiPermission("java:jboss/exported/loc/stub", "bind")),
                         "permissions.xml");

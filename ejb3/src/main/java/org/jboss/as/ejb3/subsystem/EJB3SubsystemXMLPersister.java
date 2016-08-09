@@ -80,7 +80,6 @@ public class EJB3SubsystemXMLPersister implements XMLElementWriter<SubsystemMars
         // <stateful> element
         if (model.hasDefined(EJB3SubsystemModel.DEFAULT_STATEFUL_BEAN_ACCESS_TIMEOUT)
                 || model.hasDefined(EJB3SubsystemModel.DEFAULT_SFSB_CACHE)
-                || model.hasDefined(EJB3SubsystemModel.DEFAULT_CLUSTERED_SFSB_CACHE)
                 || model.hasDefined(EJB3SubsystemModel.DEFAULT_SFSB_PASSIVATION_DISABLED_CACHE)) {
             // <stateful>
             writer.writeStartElement(EJB3SubsystemXMLElement.STATEFUL.getLocalName());
@@ -281,6 +280,7 @@ public class EJB3SubsystemXMLPersister implements XMLElementWriter<SubsystemMars
         writer.writeAttribute(EJB3SubsystemXMLAttribute.CONNECTOR_REF.getLocalName(), model.require(EJB3SubsystemModel.CONNECTOR_REF).asString());
         writer.writeAttribute(EJB3SubsystemXMLAttribute.THREAD_POOL_NAME.getLocalName(), model.require(EJB3SubsystemModel.THREAD_POOL_NAME).asString());
 
+        EJB3RemoteResourceDefinition.EXECUTE_IN_WORKER.marshallAsAttribute(model, writer);
         // write out any channel creation options
         if (model.hasDefined(CHANNEL_CREATION_OPTIONS)) {
             writeChannelCreationOptions(writer, model.get(CHANNEL_CREATION_OPTIONS));
@@ -380,10 +380,6 @@ public class EJB3SubsystemXMLPersister implements XMLElementWriter<SubsystemMars
         if (statefulBeanModel.hasDefined(DEFAULT_SFSB_CACHE)) {
             String cache = statefulBeanModel.get(DEFAULT_SFSB_CACHE).asString();
             writer.writeAttribute(EJB3SubsystemXMLAttribute.CACHE_REF.getLocalName(), cache);
-        }
-        if (statefulBeanModel.hasDefined(DEFAULT_CLUSTERED_SFSB_CACHE)) {
-            String cache = statefulBeanModel.get(DEFAULT_CLUSTERED_SFSB_CACHE).asString();
-            writer.writeAttribute(EJB3SubsystemXMLAttribute.CLUSTERED_CACHE_REF.getLocalName(), cache);
         }
         EJB3SubsystemRootResourceDefinition.DEFAULT_SFSB_PASSIVATION_DISABLED_CACHE.marshallAsAttribute(statefulBeanModel, writer);
     }

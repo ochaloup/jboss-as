@@ -30,7 +30,7 @@
     <parent>
         <groupId>org.wildfly</groupId>
         <artifactId>wildfly-parent</artifactId>
-        <version>10.0.0.CR5-SNAPSHOT</version>
+        <version>11.0.0.Alpha1-SNAPSHOT</version>
     </parent>
 
     <artifactId>wildfly-feature-pack</artifactId>
@@ -195,6 +195,14 @@
         </dependency>
 
         <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jsr310</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.fasterxml.jackson.datatype</groupId>
+            <artifactId>jackson-datatype-jdk8</artifactId>
+        </dependency>
+        <dependency>
             <groupId>com.github.relaxng</groupId>
             <artifactId>relaxngDatatype</artifactId>
         </dependency>
@@ -212,6 +220,11 @@
         <dependency>
             <groupId>com.h2database</groupId>
             <artifactId>h2</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>com.microsoft.azure</groupId>
+            <artifactId>azure-storage</artifactId>
         </dependency>
 
         <dependency>
@@ -537,6 +550,11 @@
 
         <dependency>
             <groupId>org.apache.cxf</groupId>
+            <artifactId>cxf-rt-features-clustering</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.cxf</groupId>
             <artifactId>cxf-rt-frontend-jaxws</artifactId>
             <exclusions>
                 <exclusion>
@@ -706,6 +724,11 @@
         <dependency>
             <groupId>org.apache.cxf.xjcplugins</groupId>
             <artifactId>cxf-xjc-boolean</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.apache.cxf.xjcplugins</groupId>
+            <artifactId>cxf-xjc-bug986</artifactId>
         </dependency>
 
         <dependency>
@@ -1259,6 +1282,11 @@
         </dependency>
 
         <dependency>
+            <groupId>org.jgroups</groupId>
+            <artifactId>jgroups-azure</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>org.picketlink</groupId>
             <artifactId>picketlink-api</artifactId>
         </dependency>
@@ -1297,11 +1325,6 @@
         <dependency>
             <groupId>org.picketlink</groupId>
             <artifactId>picketlink-idm-impl</artifactId>
-        </dependency>
-
-        <dependency>
-            <groupId>org.scannotation</groupId>
-            <artifactId>scannotation</artifactId>
         </dependency>
 
         <dependency>
@@ -1912,6 +1935,17 @@
         <dependency>
             <groupId>org.hibernate</groupId>
             <artifactId>hibernate-entitymanager</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>*</groupId>
+                    <artifactId>*</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        
+        <dependency>
+            <groupId>org.hibernate</groupId>
+            <artifactId>hibernate-java8</artifactId>
             <exclusions>
                 <exclusion>
                     <groupId>*</groupId>
@@ -2734,10 +2768,13 @@
 
     <profiles>
         <profile>
-            <id>release</id>
+            <!-- This profile should only be activated to download licenses from remote URLs
+                 instead of copying the license files from the src/main/resources/content/docs/licences
+                 directory -->
+            <id>download-licenses</id>
             <activation>
                 <property>
-                    <name>release</name>
+                    <name>download-licenses</name>
                 </property>
             </activation>
             <build>
@@ -2751,7 +2788,7 @@
                                 <goals>
                                     <goal>download-licenses</goal>
                                 </goals>
-                                <phase>package</phase>
+                                <phase>prepare-package</phase>
                                 <configuration>
                                     <licensesOutputDirectory>
                                         ${project.build.directory}/${project.build.finalName}/content/docs/licenses
@@ -2822,7 +2859,6 @@
                                 </goals>
                                 <phase>validate</phase>
                                 <configuration>
-                                    <debug>true</debug>
                                     <verbose>true</verbose>
                                     <maxmemory>2400m</maxmemory>
                                     <!-- To prevent problems with author names written in non-UTF-8:

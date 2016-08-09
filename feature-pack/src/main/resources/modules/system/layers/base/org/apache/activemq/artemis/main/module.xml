@@ -39,6 +39,8 @@
     </resources>
 
     <dependencies>
+        <!-- required for ARTEMIS-298 -->
+        <module name="com.google.guava"/>
         <module name="javax.api"/>
         <module name="javax.jms.api" />
         <module name="org.apache.commons.beanutils" />
@@ -63,5 +65,12 @@
         <module name="org.apache.activemq.artemis.protocol.amqp" services="import" optional="true"/>
         <module name="org.apache.activemq.artemis.protocol.hornetq" services="import" optional="true"/>
         <module name="org.apache.activemq.artemis.protocol.stomp" services="import" optional="true"/>
+
+        <!--
+          WFLY-6301 This module can be used to load user-created classes that are
+          used by Artemis resources (e.g. connector-service, transformers, etc.)
+        -->
+        <module name="org.apache.activemq.artemis.addons" slot="main" optional="true"/>
+
     </dependencies>
 </module>

@@ -30,6 +30,7 @@ import org.jboss.as.clustering.controller.RemoveStepHandler;
 import org.jboss.as.clustering.controller.ResourceServiceHandler;
 import org.jboss.as.clustering.controller.SimpleAliasEntry;
 import org.jboss.as.clustering.controller.SimpleResourceServiceHandler;
+import org.jboss.as.clustering.controller.transform.RequiredChildResourceDiscardPolicy;
 import org.jboss.as.clustering.controller.validation.EnumValidatorBuilder;
 import org.jboss.as.clustering.controller.validation.ParameterValidatorBuilder;
 import org.jboss.as.controller.AttributeDefinition;
@@ -59,8 +60,8 @@ public class EvictionResourceDefinition extends ComponentResourceDefinition {
     static final PathElement LEGACY_PATH = PathElement.pathElement(PATH.getValue(), "EVICTION");
 
     enum Attribute implements org.jboss.as.clustering.controller.Attribute {
-        MAX_ENTRIES("max-entries", ModelType.LONG, new ModelNode(-1L)),
         STRATEGY("strategy", ModelType.STRING, new ModelNode(EvictionStrategy.NONE.name()), new EnumValidatorBuilder<>(EvictionStrategy.class)),
+        MAX_ENTRIES("max-entries", ModelType.LONG, new ModelNode(-1L)),
         ;
         private final AttributeDefinition definition;
 
@@ -91,7 +92,7 @@ public class EvictionResourceDefinition extends ComponentResourceDefinition {
     private final boolean allowRuntimeOnlyRegistration;
 
     static void buildTransformation(ModelVersion version, ResourceTransformationDescriptionBuilder parent) {
-        ResourceTransformationDescriptionBuilder builder = InfinispanModel.VERSION_4_0_0.requiresTransformation(version) ? parent.addChildRedirection(PATH, LEGACY_PATH) : parent.addChildResource(PATH);
+        ResourceTransformationDescriptionBuilder builder = InfinispanModel.VERSION_4_0_0.requiresTransformation(version) ? parent.addChildRedirection(PATH, LEGACY_PATH, RequiredChildResourceDiscardPolicy.NEVER) : parent.addChildResource(PATH);
 
         if (InfinispanModel.VERSION_4_0_0.requiresTransformation(version)) {
             builder.getAttributeBuilder().setValueConverter(new AttributeConverter.DefaultAttributeConverter() {

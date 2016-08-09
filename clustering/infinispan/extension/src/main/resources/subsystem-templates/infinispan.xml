@@ -23,6 +23,9 @@
                     <transaction mode="BATCH"/>
                     <file-store passivation="false" purge="false"/>
                 </local-cache>
+                <local-cache name="concurrent">
+                    <file-store passivation="true" purge="false"/>
+                </local-cache>
             </cache-container>
             <cache-container name="ejb" aliases="sfsb" default-cache="passivation" module="org.wildfly.clustering.ejb.infinispan">
                 <local-cache name="passivation">
@@ -38,11 +41,6 @@
             </cache-container>
             <cache-container name="hibernate" default-cache="local-query" module="org.hibernate.infinispan">
                 <local-cache name="entity">
-                    <transaction mode="NON_XA"/>
-                    <eviction strategy="LRU" max-entries="10000"/>
-                    <expiration max-idle="100000"/>
-                </local-cache>
-                <local-cache name="immutable-entity">
                     <transaction mode="NON_XA"/>
                     <eviction strategy="LRU" max-entries="10000"/>
                     <expiration max-idle="100000"/>
@@ -70,6 +68,9 @@
                     <transaction mode="BATCH"/>
                     <file-store/>
                 </distributed-cache>
+                <distributed-cache name="concurrent" mode="SYNC" l1-lifespan="0" owners="2">
+                    <file-store/>
+                </distributed-cache>
             </cache-container>
             <cache-container name="ejb" aliases="sfsb" default-cache="dist" module="org.wildfly.clustering.ejb.infinispan">
                 <transport lock-timeout="60000"/>
@@ -81,15 +82,15 @@
             </cache-container>
             <cache-container name="hibernate" default-cache="local-query" module="org.hibernate.infinispan">
                 <transport lock-timeout="60000"/>
+                <local-cache name="local-query">
+                    <eviction strategy="LRU" max-entries="10000"/>
+                    <expiration max-idle="100000"/>
+                </local-cache>
                 <invalidation-cache name="entity" mode="SYNC">
                     <transaction mode="NON_XA"/>
                     <eviction strategy="LRU" max-entries="10000"/>
                     <expiration max-idle="100000"/>
                 </invalidation-cache>
-                <local-cache name="local-query">
-                    <eviction strategy="LRU" max-entries="10000"/>
-                    <expiration max-idle="100000"/>
-                </local-cache>
                 <replicated-cache name="timestamps" mode="ASYNC"/>
             </cache-container>
         </replacement>

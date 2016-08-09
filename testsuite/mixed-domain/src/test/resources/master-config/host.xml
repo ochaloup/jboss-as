@@ -1,6 +1,7 @@
 <?xml version='1.0' encoding='UTF-8'?>
 
-<host name="master" xmlns="urn:jboss:domain:4.0">
+<host name="master" xmlns="urn:jboss:domain:5.0">
+
     <management>
         <security-realms>
             <security-realm name="ManagementRealm">
@@ -10,6 +11,11 @@
                 </authentication>
             </security-realm>
             <security-realm name="ApplicationRealm">
+                <server-identities>
+                    <ssl>
+                        <keystore path="application.keystore" relative-to="jboss.domain.config.dir" keystore-password="password" alias="server" key-password="password" generate-self-signed-certificate-host="localhost"/>
+                    </ssl>
+                </server-identities>
                 <!-- These are updated to come from the actual built AS -->
                 <authentication>
                      <local default-user="$local" allowed-users="*" skip-group-loading="true"/>
@@ -80,7 +86,7 @@
  	</jvms>
 
     <servers>
-        <server name="server-one" group="other-server-group">
+        <server name="server-one" group="other-server-group" auto-start="false">
             <socket-bindings port-offset="100"/>
         </server>
         <server name="server-two" group="other-server-group" auto-start="false"/>

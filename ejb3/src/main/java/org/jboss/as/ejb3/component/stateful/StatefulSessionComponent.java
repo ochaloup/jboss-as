@@ -23,6 +23,7 @@ package org.jboss.as.ejb3.component.stateful;
 
 import java.lang.reflect.Method;
 import java.nio.ByteBuffer;
+import java.rmi.RemoteException;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.Collections;
@@ -30,9 +31,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
+import javax.ejb.ConcurrentAccessException;
+import javax.ejb.ConcurrentAccessTimeoutException;
 import javax.ejb.EJBException;
 import javax.ejb.EJBLocalObject;
 import javax.ejb.EJBObject;
+import javax.ejb.RemoveException;
 import javax.ejb.TimerService;
 
 import org.jboss.as.ee.component.BasicComponentInstance;
@@ -393,5 +397,27 @@ public class StatefulSessionComponent extends SessionBeanComponent implements St
             return CurrentServiceContainer.getServiceContainer();
         }
         return AccessController.doPrivileged(CurrentServiceContainer.GET_ACTION);
+    }
+
+    public boolean isRemotable(Throwable throwable) {
+        return cache.isRemotable(throwable);
+    }
+
+    public boolean shouldDiscard(Exception ex, Method method) {
+
+        // Detect app exception
+        if (getApplicationException(ex.getClass(), method) != null) {
+            // it's an application exception, just throw it back.
+            return false;
+        }
+        if (ex instanceof ConcurrentAccessTimeoutException || ex instanceof ConcurrentAccessException) {
+            return false;
+        }
+        if (!(ex instanceof RemoveException)) {
+            if (ex instanceof RuntimeException || ex instanceof RemoteException) {
+                return true;
+            }
+        }
+        return false;
     }
 }

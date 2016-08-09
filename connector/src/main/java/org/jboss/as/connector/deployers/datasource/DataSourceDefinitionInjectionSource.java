@@ -31,6 +31,7 @@ import org.jboss.as.connector.subsystems.datasources.ModifiableDataSource;
 import org.jboss.as.connector.subsystems.datasources.ModifiableXaDataSource;
 import org.jboss.as.connector.subsystems.datasources.XaDataSourceService;
 import org.jboss.as.connector.util.ConnectorServices;
+import org.jboss.as.core.security.ServerSecurityManager;
 import org.jboss.as.ee.component.Attachments;
 import org.jboss.as.ee.component.EEModuleDescription;
 import org.jboss.as.ee.resource.definition.ResourceDefinitionInjectionSource;
@@ -40,6 +41,7 @@ import org.jboss.as.naming.deployment.ContextNames;
 import org.jboss.as.naming.service.BinderService;
 import org.jboss.as.naming.service.NamingService;
 import org.jboss.as.security.deployment.SecurityAttachments;
+import org.jboss.as.security.service.SimpleSecurityManagerService;
 import org.jboss.as.security.service.SubjectFactoryService;
 import org.jboss.as.server.Services;
 import org.jboss.as.server.deployment.DeploymentPhaseContext;
@@ -68,6 +70,7 @@ import org.jboss.msc.service.ServiceTarget;
 import org.jboss.security.SubjectFactory;
 
 import javax.sql.XADataSource;
+
 import java.lang.reflect.Method;
 import java.sql.Connection;
 import java.util.Iterator;
@@ -150,7 +153,7 @@ public class DataSourceDefinitionInjectionSource extends ResourceDefinitionInjec
                                                              maxPoolSize < 1 ? Defaults.MAX_POOL_SIZE : Integer.valueOf(maxPoolSize),
                                                              Defaults.PREFILL, Defaults.USE_STRICT_MIN, Defaults.FLUSH_STRATEGY,
                                                              Defaults.IS_SAME_RM_OVERRIDE, Defaults.INTERLEAVING, Defaults.PAD_XID,
-                                                             Defaults.WRAP_XA_RESOURCE, Defaults.NO_TX_SEPARATE_POOL, Boolean.FALSE, null, null);
+                                                             Defaults.WRAP_XA_RESOURCE, Defaults.NO_TX_SEPARATE_POOL, Boolean.FALSE, null, Defaults.FAIR, null);
                 final ModifiableXaDataSource dataSource = new ModifiableXaDataSource(transactionIsolation(),
                         null, dsSecurity, null, null, null,
                         null, null, null, poolName, true,
@@ -164,7 +167,7 @@ public class DataSourceDefinitionInjectionSource extends ResourceDefinitionInjec
                 final DsPoolImpl commonPool = new DsPoolImpl(minPoolSize < 0 ? Defaults.MIN_POOL_SIZE : Integer.valueOf(minPoolSize),
                                                              initialPoolSize < 0 ? Defaults.INITIAL_POOL_SIZE : Integer.valueOf(initialPoolSize),
                                                              maxPoolSize < 1 ? Defaults.MAX_POOL_SIZE : Integer.valueOf(maxPoolSize),
-                                                             Defaults.PREFILL, Defaults.USE_STRICT_MIN, Defaults.FLUSH_STRATEGY, Boolean.FALSE, null, null);
+                                                             Defaults.PREFILL, Defaults.USE_STRICT_MIN, Defaults.FLUSH_STRATEGY, Boolean.FALSE, null, Defaults.FAIR, null);
                 final ModifiableDataSource dataSource = new ModifiableDataSource(url, null, className, null, transactionIsolation(), properties,
                         null, dsSecurity, null, null, null, null, null, false, poolName, true, jndiName, Defaults.SPY, Defaults.USE_CCM,
                         transactional, Defaults.CONNECTABLE, Defaults.TRACKING, Defaults.MCP, Defaults.ENLISTMENT_TRACE, commonPool);
@@ -226,6 +229,7 @@ public class DataSourceDefinitionInjectionSource extends ResourceDefinitionInjec
                         dataSourceService.getExecutorServiceInjector(), false)
                 .addDependency(ConnectorServices.IRONJACAMAR_MDR, MetadataRepository.class, dataSourceService.getMdrInjector())
                 .addDependency(ConnectorServices.RA_REPOSITORY_SERVICE, ResourceAdapterRepository.class, dataSourceService.getRaRepositoryInjector())
+                .addDependency(SimpleSecurityManagerService.SERVICE_NAME, ServerSecurityManager.class, dataSourceService.getServerSecurityManager())
                 .addDependency(ConnectorServices.BOOTSTRAP_CONTEXT_SERVICE.append(DEFAULT_NAME))
                 .addDependency(ConnectorServices.TRANSACTION_INTEGRATION_SERVICE, TransactionIntegration.class,
                         dataSourceService.getTransactionIntegrationInjector())
@@ -256,11 +260,19 @@ public class DataSourceDefinitionInjectionSource extends ResourceDefinitionInjec
                     public void transition(final ServiceController<? extends Object> controller, final ServiceController.Transition transition) {
                         switch (transition) {
                             case STARTING_to_UP: {
-                                SUBSYSTEM_DATASOURCES_LOGGER.boundDataSource(jndiName);
+                                if (isTransactional()) {
+                                    SUBSYSTEM_DATASOURCES_LOGGER.boundDataSource(jndiName);
+                                } else {
+                                    SUBSYSTEM_DATASOURCES_LOGGER.boundNonJTADataSource(jndiName);
+                                }
                                 break;
                             }
                             case START_REQUESTED_to_DOWN: {
-                                SUBSYSTEM_DATASOURCES_LOGGER.unboundDataSource(jndiName);
+                                if (isTransactional()) {
+                                    SUBSYSTEM_DATASOURCES_LOGGER.unboundDataSource(jndiName);
+                                } else {
+                                    SUBSYSTEM_DATASOURCES_LOGGER.unBoundNonJTADataSource(jndiName);
+                                }
                                 break;
                             }
                             case REMOVING_to_REMOVED: {

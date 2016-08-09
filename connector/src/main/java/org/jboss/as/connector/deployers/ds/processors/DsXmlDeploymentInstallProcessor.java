@@ -52,12 +52,14 @@ import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
 import org.jboss.as.controller.registry.Resource;
+import org.jboss.as.core.security.ServerSecurityManager;
 import org.jboss.as.naming.ManagedReferenceFactory;
 import org.jboss.as.naming.ServiceBasedNamingStore;
 import org.jboss.as.naming.deployment.ContextNames;
 import org.jboss.as.naming.service.BinderService;
 import org.jboss.as.naming.service.NamingService;
 import org.jboss.as.security.deployment.SecurityAttachments;
+import org.jboss.as.security.service.SimpleSecurityManagerService;
 import org.jboss.as.security.service.SubjectFactoryService;
 import org.jboss.as.server.Services;
 import org.jboss.as.server.deployment.Attachments;
@@ -142,7 +144,7 @@ public class DsXmlDeploymentInstallProcessor implements DeploymentUnitProcessor 
                             final PathAddress addr = getDataSourceAddress(dsName, deploymentUnit, false);
                             installManagementModel(ds, deploymentUnit, addr);
                             startDataSource(lds, jndiName, ds.getDriver(), serviceTarget,
-                                    getRegistration(false, deploymentUnit), getResource(dsName, false, deploymentUnit), dsName, securityEnabled);
+                                    getRegistration(false, deploymentUnit), getResource(dsName, false, deploymentUnit), dsName, securityEnabled, ds.isJTA());
                         } catch (Exception e) {
                             throw ConnectorLogger.ROOT_LOGGER.exceptionDeployingDatasource(e, ds.getJndiName());
                         }
@@ -164,7 +166,7 @@ public class DsXmlDeploymentInstallProcessor implements DeploymentUnitProcessor 
                             final PathAddress addr = getDataSourceAddress(dsName, deploymentUnit, true);
                             installManagementModel(xads, deploymentUnit, addr);
                             startDataSource(xds, jndiName, xads.getDriver(), serviceTarget,
-                                    getRegistration(true, deploymentUnit), getResource(dsName, true, deploymentUnit), dsName, securityEnabled);
+                                    getRegistration(true, deploymentUnit), getResource(dsName, true, deploymentUnit), dsName, securityEnabled, true);
 
                         } catch (Exception e) {
                             throw ConnectorLogger.ROOT_LOGGER.exceptionDeployingDatasource(e, xads.getJndiName());
@@ -247,14 +249,14 @@ public class DsXmlDeploymentInstallProcessor implements DeploymentUnitProcessor 
         final DsXaPool xaPool;
         if (xads.getXaPool() == null) {
             xaPool = new DsXaPoolImpl(Defaults.MIN_POOL_SIZE, Defaults.INITIAL_POOL_SIZE, Defaults.MAX_POOL_SIZE, Defaults.PREFILL, Defaults.USE_STRICT_MIN, Defaults.FLUSH_STRATEGY,
-                                      Defaults.IS_SAME_RM_OVERRIDE, Defaults.INTERLEAVING, Defaults.PAD_XID, Defaults.WRAP_XA_RESOURCE, Defaults.NO_TX_SEPARATE_POOL, Defaults.ALLOW_MULTIPLE_USERS, null, null);
+                                      Defaults.IS_SAME_RM_OVERRIDE, Defaults.INTERLEAVING, Defaults.PAD_XID, Defaults.WRAP_XA_RESOURCE, Defaults.NO_TX_SEPARATE_POOL, Defaults.ALLOW_MULTIPLE_USERS, null, Defaults.FAIR, null);
         } else {
             final DsXaPool p = xads.getXaPool();
             xaPool = new DsXaPoolImpl(getDef(p.getMinPoolSize(), Defaults.MIN_POOL_SIZE), getDef(p.getInitialPoolSize(), Defaults.INITIAL_POOL_SIZE), getDef(p.getMaxPoolSize(), Defaults.MAX_POOL_SIZE), getDef(p.isPrefill(), Defaults.PREFILL),
                     getDef(p.isUseStrictMin(), Defaults.USE_STRICT_MIN), getDef(p.getFlushStrategy(), Defaults.FLUSH_STRATEGY), getDef(p.isSameRmOverride(),
                     Defaults.IS_SAME_RM_OVERRIDE), getDef(p.isInterleaving(), Defaults.INTERLEAVING), getDef(p.isPadXid(), Defaults.PAD_XID)
                     , getDef(p.isWrapXaResource(), Defaults.WRAP_XA_RESOURCE), getDef(p.isNoTxSeparatePool(), Defaults.NO_TX_SEPARATE_POOL), getDef(p.isAllowMultipleUsers(), Defaults.ALLOW_MULTIPLE_USERS),
-                    p.getCapacity(), p.getConnectionListener());
+                    p.getCapacity(), getDef(p.isFair(), Defaults.FAIR), p.getConnectionListener());
         }
 
 
@@ -280,7 +282,8 @@ public class DsXmlDeploymentInstallProcessor implements DeploymentUnitProcessor 
                                  final ServiceTarget serviceTarget,
                                  final ManagementResourceRegistration registration,
                                  final Resource resource,
-                                 final String managementName, boolean securityEnabled) {
+                                 final String managementName, boolean securityEnabled,
+                                 final boolean isTransactional) {
 
         final ContextNames.BindInfo bindInfo = ContextNames.bindInfoFor(jndiName);
 
@@ -291,6 +294,7 @@ public class DsXmlDeploymentInstallProcessor implements DeploymentUnitProcessor 
                         dataSourceService.getExecutorServiceInjector(), false)
                 .addDependency(ConnectorServices.IRONJACAMAR_MDR, MetadataRepository.class, dataSourceService.getMdrInjector())
                 .addDependency(ConnectorServices.RA_REPOSITORY_SERVICE, ResourceAdapterRepository.class, dataSourceService.getRaRepositoryInjector())
+                .addDependency(SimpleSecurityManagerService.SERVICE_NAME, ServerSecurityManager.class, dataSourceService.getServerSecurityManager())
                 .addDependency(ConnectorServices.BOOTSTRAP_CONTEXT_SERVICE.append(DEFAULT_NAME))
                 .addDependency(ConnectorServices.TRANSACTION_INTEGRATION_SERVICE, TransactionIntegration.class,
                         dataSourceService.getTransactionIntegrationInjector())
@@ -342,11 +346,19 @@ public class DsXmlDeploymentInstallProcessor implements DeploymentUnitProcessor 
                     public void transition(final ServiceController<?> controller, final ServiceController.Transition transition) {
                         switch (transition) {
                             case STARTING_to_UP: {
-                                SUBSYSTEM_DATASOURCES_LOGGER.boundDataSource(jndiName);
+                                if (isTransactional) {
+                                    SUBSYSTEM_DATASOURCES_LOGGER.boundDataSource(jndiName);
+                                } else {
+                                    SUBSYSTEM_DATASOURCES_LOGGER.boundNonJTADataSource(jndiName);
+                                }
                                 break;
                             }
                             case START_REQUESTED_to_DOWN: {
-                                SUBSYSTEM_DATASOURCES_LOGGER.unboundDataSource(jndiName);
+                                if (isTransactional) {
+                                    SUBSYSTEM_DATASOURCES_LOGGER.unboundDataSource(jndiName);
+                                } else {
+                                    SUBSYSTEM_DATASOURCES_LOGGER.unBoundNonJTADataSource(jndiName);
+                                }
                                 break;
                             }
                             case REMOVING_to_REMOVED: {

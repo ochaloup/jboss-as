@@ -32,6 +32,7 @@ import static org.jboss.as.connector.subsystems.common.pool.Constants.IDLETIMEOU
 import static org.jboss.as.connector.subsystems.common.pool.Constants.INITIAL_POOL_SIZE;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.MAX_POOL_SIZE;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.MIN_POOL_SIZE;
+import static org.jboss.as.connector.subsystems.common.pool.Constants.POOL_FAIR;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.POOL_FLUSH_STRATEGY;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.POOL_PREFILL;
 import static org.jboss.as.connector.subsystems.common.pool.Constants.POOL_USE_STRICT_MIN;
@@ -202,6 +203,7 @@ public class RaOperationUtil {
         int minPoolSize = ModelNodeUtil.getIntIfSetOrGetDefault(context, connDefModel, MIN_POOL_SIZE);
         Integer initialPoolSize = ModelNodeUtil.getIntIfSetOrGetDefault(context, connDefModel, INITIAL_POOL_SIZE);
         boolean prefill = ModelNodeUtil.getBooleanIfSetOrGetDefault(context, connDefModel, POOL_PREFILL);
+        boolean fair = ModelNodeUtil.getBooleanIfSetOrGetDefault(context, connDefModel, POOL_FAIR);
         boolean useStrictMin = ModelNodeUtil.getBooleanIfSetOrGetDefault(context, connDefModel, POOL_USE_STRICT_MIN);
         String flushStrategyString = POOL_FLUSH_STRATEGY.resolveModelAttribute(context, connDefModel).asString();
         final FlushStrategy flushStrategy = FlushStrategy.forName(flushStrategyString);
@@ -228,9 +230,9 @@ public class RaOperationUtil {
 
         Pool pool;
         if (isXa) {
-            pool = new XaPoolImpl(minPoolSize, initialPoolSize, maxPoolSize, prefill, useStrictMin, flushStrategy, capacity, isSameRM, interlivng, padXid, wrapXaResource, noTxSeparatePool);
+            pool = new XaPoolImpl(minPoolSize, initialPoolSize, maxPoolSize, prefill, useStrictMin, flushStrategy, capacity, fair, isSameRM, interlivng, padXid, wrapXaResource, noTxSeparatePool);
         } else {
-            pool = new PoolImpl(minPoolSize, initialPoolSize, maxPoolSize, prefill, useStrictMin, flushStrategy, capacity);
+            pool = new PoolImpl(minPoolSize, initialPoolSize, maxPoolSize, prefill, useStrictMin, flushStrategy, capacity, fair);
         }
         String securityDomain = ModelNodeUtil.getResolvedStringIfSetOrGetDefault(context, connDefModel, SECURITY_DOMAIN);
         String securityDomainAndApplication = ModelNodeUtil.getResolvedStringIfSetOrGetDefault(context, connDefModel, SECURITY_DOMAIN_AND_APPLICATION);
@@ -358,7 +360,7 @@ public class RaOperationUtil {
         final ServiceController<?> RaxmlController = registry.getService(ServiceName.of(ConnectorServices.RA_SERVICE, raName));
         Activation raxml = (Activation) RaxmlController.getValue();
         RaServicesFactory.createDeploymentService(inactive.getRegistration(), inactive.getConnectorXmlDescriptor(), inactive.getModule(), inactive.getServiceTarget(),
-                archiveName, inactive.getDeploymentUnitServiceName(), inactive.getDeployment(), raxml, inactive.getResource());
+                archiveName, inactive.getDeploymentUnitServiceName(), inactive.getDeployment(), raxml, inactive.getResource(), registry);
     }
 
     public static ServiceName installRaServices(OperationContext context, String name, ModifiableResourceAdapter resourceAdapter, final List<ServiceController<?>> newControllers) {

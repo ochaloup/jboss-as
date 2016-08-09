@@ -50,6 +50,7 @@ import org.jboss.as.connector.util.ConnectorServices;
 import org.jboss.as.naming.deployment.ContextNames;
 import org.jboss.as.naming.service.NamingService;
 import org.jboss.as.network.SocketBinding;
+import org.jboss.as.security.service.SecurityBootstrapService;
 import org.jboss.as.security.service.SubjectFactoryService;
 import org.jboss.as.server.Services;
 import org.jboss.as.txn.service.TxnServices;
@@ -283,6 +284,9 @@ public class PooledConnectionFactoryService implements Service<Void> {
                 .addDependency(serverServiceName, ActiveMQServer.class, service.activeMQServer)
                 .addDependency(ActiveMQActivationService.getServiceName(serverServiceName))
                 .addDependency(JMSServices.getJmsManagerBaseServiceName(serverServiceName))
+                // WFLY-6652 this dependency ensures that Artemis will be able to destroy any queues created on behalf of a
+                // pooled-connection-factory client during server stop
+                .addDependency(SecurityBootstrapService.SERVICE_NAME)
                 .setInitialMode(ServiceController.Mode.PASSIVE);
         serviceBuilder.install();
     }
@@ -466,11 +470,11 @@ public class PooledConnectionFactoryService implements Service<Void> {
         Boolean isXA = Boolean.FALSE;
         final Pool pool;
         if (transactionSupport == TransactionSupportEnum.XATransaction) {
-            pool = new XaPoolImpl(minSize, Defaults.INITIAL_POOL_SIZE, maxSize, prefill, useStrictMin, flushStrategy, null,
+            pool = new XaPoolImpl(minSize, Defaults.INITIAL_POOL_SIZE, maxSize, prefill, useStrictMin, flushStrategy, null, Defaults.FAIR,
                     Defaults.IS_SAME_RM_OVERRIDE, Defaults.INTERLEAVING, Defaults.PAD_XID, Defaults.WRAP_XA_RESOURCE, Defaults.NO_TX_SEPARATE_POOL);
             isXA = Boolean.TRUE;
         } else {
-            pool = new PoolImpl(minSize, Defaults.INITIAL_POOL_SIZE, maxSize, prefill, useStrictMin, flushStrategy, null);
+            pool = new PoolImpl(minSize, Defaults.INITIAL_POOL_SIZE, maxSize, prefill, useStrictMin, flushStrategy, null, Defaults.FAIR);
         }
         TimeOut timeOut = new TimeOutImpl(null, null, null, null, null) {
         };

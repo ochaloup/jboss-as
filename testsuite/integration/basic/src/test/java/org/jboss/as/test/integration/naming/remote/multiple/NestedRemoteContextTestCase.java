@@ -1,6 +1,5 @@
 package org.jboss.as.test.integration.naming.remote.multiple;
 
-import java.lang.reflect.ReflectPermission;
 import java.net.SocketPermission;
 import java.net.URL;
 import java.util.PropertyPermission;
@@ -18,7 +17,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
-import org.jboss.as.naming.JndiPermission;
+import org.wildfly.naming.java.permission.JndiPermission;
 import org.jboss.as.test.integration.security.common.Utils;
 import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 import org.jboss.remoting3.security.RemotingPermission;
@@ -67,8 +66,6 @@ public class NestedRemoteContextTestCase {
         return ShrinkWrap.create(WebArchive.class, "binder.war")
                 .addClasses(BindRmiServlet.class, MyObject.class)
                 .setWebXML(MultipleClientRemoteJndiTestCase.class.getPackage(), "web.xml")
-                // dependency to org.jboss.as.naming module is used to grant JndiPermission
-                .addAsManifestResource(new StringAsset("Dependencies: org.jboss.as.naming\n"), "MANIFEST.MF")
                 // BindRmiServlet binds java:jboss/exported/loc/stub
                 .addAsManifestResource(createPermissionsXmlAsset(new JndiPermission("java:jboss/exported/loc/stub", "bind")),
                         "permissions.xml");

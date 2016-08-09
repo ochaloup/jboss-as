@@ -46,6 +46,7 @@
                 log-write-rate="${log.journal.write.rate:true}"
                 file-size="${journal.file.size:102400}"
                 min-files="${journal.min.files:2}"
+                pool-files="${journal.pool.files:5}"
                 compact-percentage="${journal.compact.percentage:83}"
                 compact-min-files="${journal.compact.min.files:2}"
                 max-io="${journal.max.io:50}"
@@ -119,7 +120,9 @@
                          send-to-dla-on-no-route="${send.to.dla.on.no.route:false}"
                          slow-consumer-check-period="${slow.consumer.check.period:123}"
                          slow-consumer-policy="${slow.consumer.policy:KILL}"
-                         slow-consumer-threshold="${slow.consumer.threshold:456}"/>
+                         slow-consumer-threshold="${slow.consumer.threshold:456}"
+                         auto-create-jms-queues="${auto.create.jms.queue:true}"
+                         auto-delete-jms-queues="${auto.delete.jms.queue:true}"/>
 
         <http-connector name="http"
                         socket-binding="http"

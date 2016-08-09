@@ -33,7 +33,9 @@ import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 
+import org.jboss.logging.Logger;
 import org.wildfly.clustering.ee.Batch;
 import org.wildfly.clustering.ee.BatchContext;
 import org.wildfly.clustering.ee.Batcher;
@@ -46,10 +48,13 @@ import org.wildfly.clustering.web.sso.Sessions;
  */
 public class DistributableSingleSignOn implements InvalidatableSingleSignOn {
 
+    static final Logger LOGGER = Logger.getLogger(DistributableSingleSignOn.class);
+
     private final SSO<AuthenticatedSession, String, Void> sso;
     private final SessionManagerRegistry registry;
     private final Batcher<Batch> batcher;
     private final Batch batch;
+    private final AtomicBoolean closed = new AtomicBoolean(false);
 
     public DistributableSingleSignOn(SSO<AuthenticatedSession, String, Void> sso, SessionManagerRegistry registry, Batcher<Batch> batcher, Batch batch) {
         this.sso = sso;
@@ -106,6 +111,9 @@ public class DistributableSingleSignOn implements InvalidatableSingleSignOn {
     @Override
     public void add(Session session) {
         try (BatchContext context = this.batcher.resumeBatch(this.batch)) {
+            if (LOGGER.isTraceEnabled()) {
+                LOGGER.tracef("Adding Session ID %s to SSO session %s.", session.getId(), this.sso.getId());
+            }
             this.sso.getSessions().addSession(session.getSessionManager().getDeploymentName(), session.getId());
         }
     }
@@ -113,6 +121,9 @@ public class DistributableSingleSignOn implements InvalidatableSingleSignOn {
     @Override
     public void remove(Session session) {
         try (BatchContext context = this.batcher.resumeBatch(this.batch)) {
+            if (LOGGER.isTraceEnabled()) {
+                LOGGER.tracef("Removing SSO ID %s from deployment %s.", this.sso.getId(), session.getSessionManager().getDeploymentName());
+            }
             this.sso.getSessions().removeSession(session.getSessionManager().getDeploymentName());
         }
     }
@@ -127,7 +138,7 @@ public class DistributableSingleSignOn implements InvalidatableSingleSignOn {
 
     @Override
     public void close() {
-        if (this.batch.isActive()) {
+        if (this.closed.compareAndSet(false, true)) {
             try (BatchContext context = this.batcher.resumeBatch(this.batch)) {
                 this.batch.close();
             }
@@ -137,13 +148,11 @@ public class DistributableSingleSignOn implements InvalidatableSingleSignOn {
     @Override
     public void invalidate() {
         // The batch associated with this SSO might not be valid (e.g. in the case of logout).
-        if (this.batch.isActive()) {
-            try (BatchContext context = this.batcher.resumeBatch(this.batch)) {
-                this.sso.invalidate();
-                this.batch.close();
-            }
-        } else {
-            try (Batch batch = this.batcher.createBatch()) {
+        try (BatchContext context = this.closed.compareAndSet(false, true) ? this.batcher.resumeBatch(this.batch) : null) {
+            try (Batch batch = (context != null) ? this.batch : this.batcher.createBatch()) {
+                if (LOGGER.isTraceEnabled()) {
+                    LOGGER.tracef("Invalidating SSO ID %s.", this.sso.getId());
+                }
                 this.sso.invalidate();
             }
         }
@@ -172,6 +181,9 @@ public class DistributableSingleSignOn implements InvalidatableSingleSignOn {
         public void invalidate(HttpServerExchange exchange) {
             Session session = this.manager.getSession(exchange, new SimpleSessionConfig(this.sessionId));
             if (session != null) {
+                if (LOGGER.isTraceEnabled()) {
+                    LOGGER.tracef("Invalidating Session ID %s.", session.getId());
+                }
                 session.invalidate(exchange);
             }
         }

@@ -22,22 +22,15 @@
 
 package org.jboss.as.web;
 
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.NAME;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP_ADDR;
 import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.SUBSYSTEM;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.UNDEFINE_ATTRIBUTE_OPERATION;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.VALUE;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.WRITE_ATTRIBUTE_OPERATION;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
-import java.util.Map;
+import java.util.Set;
 
-import org.jboss.as.controller.Extension;
 import org.jboss.as.controller.ExtensionContext;
 import org.jboss.as.controller.ModelVersion;
-import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.SubsystemRegistration;
@@ -45,15 +38,10 @@ import org.jboss.as.controller.access.constraint.SensitivityClassification;
 import org.jboss.as.controller.access.management.SensitiveTargetAccessConstraintDefinition;
 import org.jboss.as.controller.descriptions.DeprecatedResourceDescriptionResolver;
 import org.jboss.as.controller.descriptions.StandardResourceDescriptionResolver;
-import org.jboss.as.controller.extension.UnsupportedSubsystemDescribeHandler;
-import org.jboss.as.controller.operations.common.GenericSubsystemDescribeHandler;
+import org.jboss.as.controller.extension.AbstractLegacyExtension;
 import org.jboss.as.controller.parsing.ExtensionParsingContext;
 import org.jboss.as.controller.registry.AliasEntry;
 import org.jboss.as.controller.registry.ManagementResourceRegistration;
-import org.jboss.as.controller.transform.OperationResultTransformer;
-import org.jboss.as.controller.transform.OperationTransformer;
-import org.jboss.as.controller.transform.TransformationContext;
-import org.jboss.as.controller.transform.description.AttributeConverter;
 import org.jboss.as.controller.transform.description.DiscardAttributeChecker;
 import org.jboss.as.controller.transform.description.RejectAttributeChecker;
 import org.jboss.as.controller.transform.description.ResourceTransformationDescriptionBuilder;
@@ -67,7 +55,7 @@ import org.jboss.dmr.ModelNode;
  * @author Emanuel Muckenhuber
  * @author Tomaz Cerar
  */
-public class WebExtension implements Extension {
+public class WebExtension extends AbstractLegacyExtension {
     public static final String SUBSYSTEM_NAME = "web";
     public static final PathElement SUBSYSTEM_PATH = PathElement.pathElement(SUBSYSTEM, SUBSYSTEM_NAME);
     public static final PathElement VALVE_PATH = PathElement.pathElement(Constants.VALVE);
@@ -90,7 +78,7 @@ public class WebExtension implements Extension {
     private static final String RESOURCE_NAME = WebExtension.class.getPackage().getName() + ".LocalDescriptions";
     private static final ModelVersion CURRENT_MODEL_VERSION = ModelVersion.create(2, 2, 0);
     static final ModelVersion DEPRECATED_SINCE = ModelVersion.create(1,5,0);
-    private static final String extensionName = "org.jboss.as.web";
+    private static final String EXTENSION_NAME = "org.jboss.as.web";
 
     static final SensitiveTargetAccessConstraintDefinition WEB_CONNECTOR_CONSTRAINT = new SensitiveTargetAccessConstraintDefinition(
             new SensitivityClassification(SUBSYSTEM_NAME, "web-connector", false, false, false));
@@ -99,15 +87,17 @@ public class WebExtension implements Extension {
             new SensitivityClassification(SUBSYSTEM_NAME, "web-valve", false, false, false));
 
     public WebExtension() {
+        super(EXTENSION_NAME, "web");
     }
 
+    @SuppressWarnings("deprecation")
     static StandardResourceDescriptionResolver getResourceDescriptionResolver(final String keyPrefix) {
         final String prefix = SUBSYSTEM_NAME + (keyPrefix == null ? "" : "." + keyPrefix);
         return new DeprecatedResourceDescriptionResolver(SUBSYSTEM_NAME, prefix, RESOURCE_NAME, WebExtension.class.getClassLoader(), true, false);
     }
 
     @Override
-    public void initialize(ExtensionContext context) {
+    protected Set<ManagementResourceRegistration> initializeLegacyModel(ExtensionContext context) {
         final SubsystemRegistration subsystem = context.registerSubsystem(SUBSYSTEM_NAME, CURRENT_MODEL_VERSION);
 
         final ManagementResourceRegistration registration = subsystem.registerSubsystemModel(WebDefinition.INSTANCE);
@@ -154,168 +144,24 @@ public class WebExtension implements Extension {
         // Global valve.
         registration.registerSubModel(WebValveDefinition.INSTANCE);
 
+        //noinspection deprecation
         if (context.isRegisterTransformers()) {
-            registerTransformers_1_1_x(subsystem, 0);
-            registerTransformers_1_1_x(subsystem, 1);
-            registerTransformers_1_2_0(subsystem);
             registerTransformers_1_3_0(subsystem);
             registerTransformers_1_4_0(subsystem);
             registerTransformers_2_x_0(subsystem, 0);
             registerTransformers_2_x_0(subsystem, 1);
         }
-
-        registration.registerOperationHandler(GenericSubsystemDescribeHandler.DEFINITION,
-                new UnsupportedSubsystemDescribeHandler(extensionName));
+        return Collections.singleton(registration);
     }
 
     @Override
-    public void initializeParsers(ExtensionParsingContext context) {
+    protected void initializeLegacyParsers(ExtensionParsingContext context) {
         for (Namespace ns : Namespace.values()) {
             if (ns.getUriString() != null) {
                 context.setSubsystemXmlMapping(SUBSYSTEM_NAME, ns.getUriString(), WebSubsystemParser.getInstance());
             }
         }
         context.setProfileParsingCompletionHandler(new DefaultJsfProfileCompletionHandler());
-    }
-
-    private void registerTransformers_1_1_x(SubsystemRegistration registration, int micro) {
-
-        final int defaultRedirectPort = 443;
-        final ResourceTransformationDescriptionBuilder subsystemRoot = TransformationDescriptionBuilder.Factory.createSubsystemInstance();
-        subsystemRoot.getAttributeBuilder()
-                .addRejectCheck(RejectAttributeChecker.DEFINED, WebDefinition.DEFAULT_SESSION_TIMEOUT)
-                .setDiscard(new DiscardAttributeChecker.DiscardAttributeValueChecker(false, true, new ModelNode(30)), WebDefinition.DEFAULT_SESSION_TIMEOUT)
-                .end();
-
-        // Discard valve
-        subsystemRoot.rejectChildResource(VALVE_PATH);
-
-        // Reject expressions for configuration
-        subsystemRoot.addChildResource(JSP_CONFIGURATION_PATH).getAttributeBuilder()
-                .addRejectCheck(RejectAttributeChecker.SIMPLE_EXPRESSIONS, WebJSPDefinition.JSP_ATTRIBUTES);
-        subsystemRoot.addChildResource(STATIC_RESOURCES_PATH).getAttributeBuilder()
-                .addRejectCheck(RejectAttributeChecker.SIMPLE_EXPRESSIONS, WebStaticResources.STATIC_ATTRIBUTES);
-        subsystemRoot.addChildResource(CONTAINER_PATH).getAttributeBuilder()
-                .addRejectCheck(RejectAttributeChecker.SIMPLE_EXPRESSIONS, WebContainerDefinition.CONTAINER_ATTRIBUTES);
-
-        final ResourceTransformationDescriptionBuilder connectorBuilder = subsystemRoot.addChildResource(CONNECTOR_PATH);
-        connectorBuilder.getAttributeBuilder()
-                .addRejectCheck(RejectAttributeChecker.SIMPLE_EXPRESSIONS, WebConnectorDefinition.CONNECTOR_ATTRIBUTES)
-                .setValueConverter(new AttributeConverter.DefaultAttributeConverter() {
-                    @Override
-                    protected void convertAttribute(PathAddress address, String attributeName, ModelNode attributeValue, TransformationContext context) {
-                        if (!attributeValue.isDefined()) {
-                            attributeValue.set(defaultRedirectPort);
-                        }
-                    }
-                }, WebConnectorDefinition.REDIRECT_PORT.getName())
-                .end()
-                .addOperationTransformationOverride(UNDEFINE_ATTRIBUTE_OPERATION)
-                .inheritResourceAttributeDefinitions() // although probably not necessary
-                .setCustomOperationTransformer(new OperationTransformer() {
-                    @Override
-                    public TransformedOperation transformOperation(TransformationContext context, PathAddress address, ModelNode operation) throws OperationFailedException {
-                        final String attributeName = operation.require(NAME).asString();
-                        if (WebConnectorDefinition.REDIRECT_PORT.getName().equals(attributeName)) {
-                            final ModelNode transformed = new ModelNode();
-                            transformed.get(OP).set(WRITE_ATTRIBUTE_OPERATION);
-                            transformed.get(OP_ADDR).set(address.toModelNode());
-                            transformed.get(NAME).set(attributeName);
-                            transformed.get(VALUE).set(defaultRedirectPort);
-                            return new TransformedOperation(transformed, OperationResultTransformer.ORIGINAL_RESULT);
-                        }
-                        return new TransformedOperation(operation, OperationResultTransformer.ORIGINAL_RESULT);
-                    }
-                });
-        if (micro == 0) {
-                connectorBuilder.getAttributeBuilder().addRejectCheck(new RejectAttributeChecker.DefaultRejectAttributeChecker() {
-                    @Override
-                    protected boolean rejectAttribute(PathAddress address, String attributeName, ModelNode attributeValue, TransformationContext context) {
-                        return attributeValue.isDefined();
-                    }
-
-                    @Override
-                    public String getRejectionLogMessage(Map<String, ModelNode> attributes) {
-                        return WebMessages.MESSAGES.transformationVersion_1_1_0_JBPAPP_9314();
-                    }
-                }, Constants.VIRTUAL_SERVER);
-        }
-
-
-        //
-        connectorBuilder.addChildRedirection(SSL_PATH, SSL_ALIAS).getAttributeBuilder()
-                .addRejectCheck(RejectAttributeChecker.SIMPLE_EXPRESSIONS, WebSSLDefinition.SSL_ATTRIBUTES)
-                .addRejectCheck(RejectAttributeChecker.DEFINED, WebSSLDefinition.SSL_PROTOCOL)
-                .addRejectCheck(RejectAttributeChecker.UNDEFINED, WebSSLDefinition.CIPHER_SUITE)
-                .setDiscard(DiscardAttributeChecker.UNDEFINED, WebSSLDefinition.SSL_PROTOCOL)
-                .setValueConverter(new AttributeConverter.DefaultAttributeConverter() {
-                    @Override
-                    protected void convertAttribute(PathAddress address, String attributeName, ModelNode attributeValue, TransformationContext context) {
-                        if (attributeValue.isDefined() && attributeValue.asString().equals(address.getLastElement().getKey())) {
-                            attributeValue.clear();
-                        }
-                    }
-                }, WebSSLDefinition.NAME)
-                .end();
-
-        final ResourceTransformationDescriptionBuilder hostBuilder = subsystemRoot.addChildResource(HOST_PATH).getAttributeBuilder()
-                .addRejectCheck(RejectAttributeChecker.SIMPLE_EXPRESSIONS, WebVirtualHostDefinition.DEFAULT_WEB_MODULE)
-                .end();
-
-        final ResourceTransformationDescriptionBuilder rewriteBuilder = hostBuilder.addChildResource(REWRITE_PATH).getAttributeBuilder()
-                .addRejectCheck(RejectAttributeChecker.SIMPLE_EXPRESSIONS, WebReWriteDefinition.FLAGS, WebReWriteDefinition.PATTERN, WebReWriteDefinition.SUBSTITUTION)
-                .end();
-
-        rewriteBuilder.addChildResource(REWRITECOND_PATH).getAttributeBuilder()
-                .addRejectCheck(RejectAttributeChecker.SIMPLE_EXPRESSIONS, WebReWriteConditionDefinition.ATTRIBUTES)
-                .addRejectCheck(RejectAttributeChecker.UNDEFINED, WebReWriteConditionDefinition.FLAGS);
-
-        hostBuilder.addChildRedirection(SSO_PATH, SSO_ALIAS).getAttributeBuilder()
-                .addRejectCheck(RejectAttributeChecker.SIMPLE_EXPRESSIONS, WebSSODefinition.SSO_ATTRIBUTES)
-                .addRejectCheck(RejectAttributeChecker.DEFINED, WebSSODefinition.HTTP_ONLY)
-                .setDiscard(new DiscardAttributeChecker.DiscardAttributeValueChecker(false, true, new ModelNode(true)), WebSSODefinition.HTTP_ONLY)
-                .end();
-
-        final ResourceTransformationDescriptionBuilder accessLogBuilder = hostBuilder.addChildRedirection(ACCESS_LOG_PATH, ACCESS_LOG_ALIAS).getAttributeBuilder()
-                .addRejectCheck(RejectAttributeChecker.SIMPLE_EXPRESSIONS, WebAccessLogDefinition.ACCESS_LOG_ATTRIBUTES)
-                .end();
-
-        accessLogBuilder.addChildRedirection(DIRECTORY_PATH, DIRECTORY_ALIAS);
-
-        // Register
-        TransformationDescription.Tools.register(subsystemRoot.build(), registration, ModelVersion.create(1, 1, micro));
-    }
-
-    private void registerTransformers_1_2_0(SubsystemRegistration registration) {
-        final ResourceTransformationDescriptionBuilder subsystemRoot = TransformationDescriptionBuilder.Factory.createSubsystemInstance();
-        subsystemRoot.getAttributeBuilder()
-                .addRejectCheck(RejectAttributeChecker.DEFINED, WebDefinition.DEFAULT_SESSION_TIMEOUT)
-                .setDiscard(new DiscardAttributeChecker.DiscardAttributeValueChecker(false, true, new ModelNode(30)), WebDefinition.DEFAULT_SESSION_TIMEOUT)
-                .end();
-
-        final ResourceTransformationDescriptionBuilder hostBuilder = subsystemRoot.addChildResource(HOST_PATH);
-        final ResourceTransformationDescriptionBuilder rewriteBuilder = hostBuilder.addChildResource(REWRITE_PATH);
-        rewriteBuilder.addChildResource(REWRITECOND_PATH).getAttributeBuilder()
-                .addRejectCheck(RejectAttributeChecker.UNDEFINED, WebReWriteConditionDefinition.FLAGS);
-        final ResourceTransformationDescriptionBuilder ssoBuilder = hostBuilder.addChildResource(SSO_PATH);
-        ssoBuilder.getAttributeBuilder()
-                .addRejectCheck(RejectAttributeChecker.DEFINED, WebSSODefinition.HTTP_ONLY)
-                .setDiscard(new DiscardAttributeChecker.DiscardAttributeValueChecker(false, true, new ModelNode(true)), WebSSODefinition.HTTP_ONLY)
-                .end();
-
-        final ResourceTransformationDescriptionBuilder connectorBuilder = subsystemRoot.addChildResource(CONNECTOR_PATH);
-        connectorBuilder.getAttributeBuilder()
-                .addRejectCheck(RejectAttributeChecker.DEFINED, WebConnectorDefinition.PROXY_BINDING, WebConnectorDefinition.REDIRECT_BINDING)
-                .setDiscard(DiscardAttributeChecker.UNDEFINED, WebConnectorDefinition.PROXY_BINDING, WebConnectorDefinition.REDIRECT_BINDING)
-                .end()
-                .addChildResource(SSL_PATH).getAttributeBuilder()
-                .addRejectCheck(RejectAttributeChecker.UNDEFINED, WebSSLDefinition.CIPHER_SUITE)
-                .addRejectCheck(RejectAttributeChecker.DEFINED, WebSSLDefinition.SSL_PROTOCOL)
-                .setDiscard(DiscardAttributeChecker.UNDEFINED, WebSSLDefinition.SSL_PROTOCOL);
-
-
-        TransformationDescription.Tools.register(subsystemRoot.build(), registration, ModelVersion.create(1, 2, 0));
-
     }
 
     private void registerTransformers_1_3_0(SubsystemRegistration registration) {
@@ -362,6 +208,7 @@ public class WebExtension implements Extension {
         TransformationDescription.Tools.register(subsystemRoot.build(), registration, ModelVersion.create(1, 4, 0));
     }
 
+    //todo, could probably be removed as 2_x was never in EAP 6.x
     private void registerTransformers_2_x_0(SubsystemRegistration registration, int minor) {
         final ResourceTransformationDescriptionBuilder subsystemRoot = TransformationDescriptionBuilder.Factory.createSubsystemInstance();
         subsystemRoot.getAttributeBuilder()

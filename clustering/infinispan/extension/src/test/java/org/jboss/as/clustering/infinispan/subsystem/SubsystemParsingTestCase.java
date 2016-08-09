@@ -25,8 +25,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
+import org.jboss.as.clustering.controller.CommonUnaryRequirement;
 import org.jboss.as.clustering.controller.Operations;
-import org.jboss.as.clustering.controller.RequiredCapability;
 import org.jboss.as.clustering.jgroups.subsystem.JGroupsSubsystemResourceDefinition;
 import org.jboss.as.clustering.subsystem.ClusteringSubsystemTest;
 import org.jboss.as.controller.PathAddress;
@@ -64,15 +64,15 @@ public class SubsystemParsingTestCase extends ClusteringSubsystemTest {
     @Parameters
     public static Collection<Object[]> data() {
         Object[][] data = new Object[][] {
-            { InfinispanSchema.VERSION_1_0, 63 },
-            { InfinispanSchema.VERSION_1_1, 63 },
-            { InfinispanSchema.VERSION_1_2, 63 },
-            { InfinispanSchema.VERSION_1_3, 63 },
-            { InfinispanSchema.VERSION_1_4, 63 },
-            { InfinispanSchema.VERSION_1_5, 63 },
-            { InfinispanSchema.VERSION_2_0, 66 },
-            { InfinispanSchema.VERSION_3_0, 66 },
-            { InfinispanSchema.VERSION_4_0, 66 },
+            { InfinispanSchema.VERSION_1_0, 33 },
+            { InfinispanSchema.VERSION_1_1, 33 },
+            { InfinispanSchema.VERSION_1_2, 37 },
+            { InfinispanSchema.VERSION_1_3, 37 },
+            { InfinispanSchema.VERSION_1_4, 37 },
+            { InfinispanSchema.VERSION_1_5, 37 },
+            { InfinispanSchema.VERSION_2_0, 42 },
+            { InfinispanSchema.VERSION_3_0, 42 },
+            { InfinispanSchema.VERSION_4_0, 51 },
         };
         return Arrays.asList(data);
     }
@@ -80,8 +80,8 @@ public class SubsystemParsingTestCase extends ClusteringSubsystemTest {
     @Override
     protected AdditionalInitialization createAdditionalInitialization() {
         return new InfinispanSubsystemInitialization()
-                .require(RequiredCapability.OUTBOUND_SOCKET_BINDING, "hotrod-server-1", "hotrod-server-2")
-                .require(RequiredCapability.DATA_SOURCE, "ExampleDS")
+                .require(CommonUnaryRequirement.OUTBOUND_SOCKET_BINDING, "hotrod-server-1", "hotrod-server-2")
+                .require(CommonUnaryRequirement.DATA_SOURCE, "ExampleDS")
                 ;
     }
 

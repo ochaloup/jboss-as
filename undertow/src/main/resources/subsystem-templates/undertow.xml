@@ -26,11 +26,12 @@
 <!--  See src/resources/configuration/ReadMe.txt for how the configuration assembly works -->
 <config>
     <extension-module>org.wildfly.extension.undertow</extension-module>
-    <subsystem xmlns="urn:jboss:domain:undertow:3.0">
+    <subsystem xmlns="urn:jboss:domain:undertow:3.1">
         <buffer-cache name="default" />
         <server name="default-server">
             <?AJP?>
-            <http-listener name="default" socket-binding="http" redirect-socket="https" />
+            <http-listener name="default" socket-binding="http" redirect-socket="https" enable-http2="true" />
+            <https-listener name="https" socket-binding="https" security-realm="ApplicationRealm" enable-http2="true" />
             <host name="default-host" alias="localhost">
                 <location name="/" handler="welcome-content" />
                 <filter-ref name="server-header"/>

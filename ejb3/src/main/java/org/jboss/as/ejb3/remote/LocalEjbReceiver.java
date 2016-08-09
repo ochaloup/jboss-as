@@ -44,10 +44,10 @@ import javax.transaction.xa.XAResource;
 
 import org.jboss.as.ee.component.Component;
 import org.jboss.as.ee.component.ComponentView;
+import org.jboss.as.ee.component.deployers.StartupCountdown;
 import org.jboss.as.ee.utils.DescriptorUtils;
 import org.jboss.as.ejb3.logging.EjbLogger;
 import org.jboss.as.ejb3.component.EJBComponent;
-import org.jboss.as.ejb3.component.entity.EntityBeanComponent;
 import org.jboss.as.ejb3.component.interceptors.AsyncInvocationTask;
 import org.jboss.as.ejb3.component.interceptors.CancellationFlag;
 import org.jboss.as.ejb3.component.session.SessionBeanComponent;
@@ -206,8 +206,7 @@ public class LocalEjbReceiver extends EJBReceiver implements Service<LocalEjbRec
             final SessionID sessionID = ((StatefulEJBLocator<?>) locator).getSessionId();
             interceptorContext.putPrivateData(SessionID.class, sessionID);
         } else if (locator instanceof EntityEJBLocator) {
-            final Object primaryKey = ((EntityEJBLocator<?>) locator).getPrimaryKey();
-            interceptorContext.putPrivateData(EntityBeanComponent.PRIMARY_KEY_CONTEXT_KEY, primaryKey);
+            throw EjbLogger.ROOT_LOGGER.ejbNotFoundInDeployment(locator.getBeanName(), locator.getAppName(), locator.getModuleName(), locator.getDistinctName());
         }
 
         final ClonerConfiguration config = new ClonerConfiguration();
@@ -217,12 +216,19 @@ public class LocalEjbReceiver extends EJBReceiver implements Service<LocalEjbRec
             if (ejbComponent instanceof SessionBeanComponent) {
                 final SessionBeanComponent component = (SessionBeanComponent) ejbComponent;
                 final CancellationFlag flag = new CancellationFlag();
-                final SecurityContext securityContext = SecurityContextAssociation.getSecurityContext();
+                final SecurityContext securityContext;
+                if (WildFlySecurityManager.isChecking()) {
+                    securityContext = AccessController.doPrivileged((PrivilegedAction<SecurityContext>) SecurityContextAssociation::getSecurityContext);
+                } else {
+                    securityContext = SecurityContextAssociation.getSecurityContext();
+                }
+                final StartupCountdown.Frame frame = StartupCountdown.current();
                 final AsyncInvocationTask task = new AsyncInvocationTask(flag) {
 
                     @Override
                     protected Object runInvocation() throws Exception {
                         setSecurityContextOnAssociation(securityContext);
+                        StartupCountdown.restore(frame);
                         try {
                             Object result = view.invoke(interceptorContext);
                             // if the result is null, there is no cloning needed
@@ -243,6 +249,7 @@ public class LocalEjbReceiver extends EJBReceiver implements Service<LocalEjbRec
                             // WFLY-4331 - clone the exception of an async task
                             throw ((Exception) LocalEjbReceiver.clone(e.getClass(), resultCloner, e, allowPassByReference));
                         } finally {
+                            StartupCountdown.restore(null);
                             clearSecurityContextOnAssociation();
                         }
                     }

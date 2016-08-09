@@ -16,7 +16,6 @@ import org.jboss.as.controller.PathAddress;
 import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.operations.common.Util;
 import org.jboss.as.model.test.FailedOperationTransformationConfig;
-import org.jboss.as.model.test.ModelFixer;
 import org.jboss.as.model.test.ModelTestControllerVersion;
 import org.jboss.as.model.test.ModelTestUtils;
 import org.jboss.as.subsystem.test.AbstractSubsystemBaseTest;
@@ -24,7 +23,6 @@ import org.jboss.as.subsystem.test.AdditionalInitialization;
 import org.jboss.as.subsystem.test.KernelServices;
 import org.jboss.as.subsystem.test.KernelServicesBuilder;
 import org.jboss.dmr.ModelNode;
-import org.jboss.dmr.ModelType;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -119,7 +117,7 @@ public class TransformersTestCase extends AbstractSubsystemBaseTest {
         Assert.assertTrue(services.getLegacyServices(model).isSuccessfulBoot());
 
         // check that both versions of the legacy model are the same and valid
-        checkSubsystemModelTransformation(services, model, V_1_1_0_FIXER);
+        checkSubsystemModelTransformation(services, model, null);
     }
 
     @Test
@@ -164,6 +162,7 @@ public class TransformersTestCase extends AbstractSubsystemBaseTest {
         List<ModelNode> operations = builder.parseXmlResource("subsystem-ejb3-transform-reject.xml");
 
         ModelTestUtils.checkFailedTransformedBootOperations(services, model, operations, createFailedOperationTransformationConfig(services, model));
+
     }
 
     private static FailedOperationTransformationConfig createFailedOperationTransformationConfig(KernelServices services, ModelVersion version) {
@@ -174,9 +173,9 @@ public class TransformersTestCase extends AbstractSubsystemBaseTest {
 
             // create a chained config to apply multiple transformation configs to each one of a collection of attributes
             FailedOperationTransformationConfig.ChainedConfig chainedConfig = FailedOperationTransformationConfig.ChainedConfig.createBuilder(
-                    EJB3SubsystemRootResourceDefinition.DEFAULT_SFSB_PASSIVATION_DISABLED_CACHE, EJB3SubsystemRootResourceDefinition.DISABLE_DEFAULT_EJB_PERMISSIONS)
+                    /*EJB3SubsystemRootResourceDefinition.DEFAULT_SFSB_PASSIVATION_DISABLED_CACHE,*/ EJB3SubsystemRootResourceDefinition.DISABLE_DEFAULT_EJB_PERMISSIONS)
                     .addConfig(new FailedOperationTransformationConfig.NewAttributesConfig(
-                            EJB3SubsystemRootResourceDefinition.DEFAULT_SFSB_PASSIVATION_DISABLED_CACHE, EJB3SubsystemRootResourceDefinition.LOG_EJB_EXCEPTIONS))
+                            /*EJB3SubsystemRootResourceDefinition.DEFAULT_SFSB_PASSIVATION_DISABLED_CACHE,*/ EJB3SubsystemRootResourceDefinition.LOG_EJB_EXCEPTIONS))
                     .addConfig(new CorrectFalseToTrue(EJB3SubsystemRootResourceDefinition.DISABLE_DEFAULT_EJB_PERMISSIONS))
                     .build();
 
@@ -216,9 +215,9 @@ public class TransformersTestCase extends AbstractSubsystemBaseTest {
 
             // create a chained config to apply multiple transformation configs to each one of a collection of attributes
             FailedOperationTransformationConfig.ChainedConfig chainedConfig = FailedOperationTransformationConfig.ChainedConfig.createBuilder(
-                    EJB3SubsystemRootResourceDefinition.DEFAULT_SFSB_PASSIVATION_DISABLED_CACHE, EJB3SubsystemRootResourceDefinition.DISABLE_DEFAULT_EJB_PERMISSIONS)
+                    /*EJB3SubsystemRootResourceDefinition.DEFAULT_SFSB_PASSIVATION_DISABLED_CACHE,*/ EJB3SubsystemRootResourceDefinition.DISABLE_DEFAULT_EJB_PERMISSIONS)
                     .addConfig(new FailedOperationTransformationConfig.NewAttributesConfig(
-                            EJB3SubsystemRootResourceDefinition.DEFAULT_SFSB_PASSIVATION_DISABLED_CACHE, EJB3SubsystemRootResourceDefinition.LOG_EJB_EXCEPTIONS))
+                            /*EJB3SubsystemRootResourceDefinition.DEFAULT_SFSB_PASSIVATION_DISABLED_CACHE,*/ EJB3SubsystemRootResourceDefinition.LOG_EJB_EXCEPTIONS))
                     .addConfig(new CorrectFalseToTrue(EJB3SubsystemRootResourceDefinition.DISABLE_DEFAULT_EJB_PERMISSIONS))
                     .build();
 
@@ -248,36 +247,6 @@ public class TransformersTestCase extends AbstractSubsystemBaseTest {
         return config;
     }
 
-    private static final ModelFixer V_1_1_0_FIXER = new ModelFixer()  {
-        @Override
-        public ModelNode fixModel(ModelNode modelNode) {
-            // Legacy parser stores incorrect type
-            ModelNode iiopEnabled = modelNode.get("service", "iiop", "enable-by-default");
-            if (iiopEnabled.getType() == ModelType.STRING) {
-                iiopEnabled.set(iiopEnabled.asBoolean());
-            }
-            ModelNode useQualfified = modelNode.get("service", "iiop", "use-qualified-name");
-            if (useQualfified.getType() == ModelType.STRING) {
-                useQualfified.set(useQualfified.asBoolean());
-            }
-            //
-            // Bogus 'name' attributes that weren't in the legacy resource definition.
-            // We don't include them in transformed resources either; if the server wants
-            // them at runtime, the bogus server code will add them anyway
-            modelNode.get("cluster-passivation-store", "infinispan").remove("name");
-            modelNode.get("strict-max-bean-instance-pool", "slsb-strict-max-pool").remove("name");
-            modelNode.get("strict-max-bean-instance-pool", "mdb-strict-max-pool").remove("name");
-            modelNode.get("cache", "simple").remove("name");
-            modelNode.get("cache", "distributable").remove("name");
-            // Previous versions of the subsystem use the hornetq-ra as the default resource adapter name, version 3.1.0 uses activemq-ra
-            ModelNode defaultResourceAdapterName = modelNode.get(EJB3SubsystemRootResourceDefinition.DEFAULT_RESOURCE_ADAPTER_NAME.getName());
-            if (defaultResourceAdapterName.isDefined() && defaultResourceAdapterName.asString().equals("hornetq-ra")) {
-                modelNode.get(EJB3SubsystemRootResourceDefinition.DEFAULT_RESOURCE_ADAPTER_NAME.getName()).set(EJB3SubsystemRootResourceDefinition.DEFAULT_RESOURCE_ADAPTER_NAME.getDefaultValue());
-            }
-            return modelNode;
-        }
-    };
-
     private static class CorrectFalseToTrue extends FailedOperationTransformationConfig.AttributesPathAddressConfig<CorrectFalseToTrue>{
 
         public CorrectFalseToTrue(AttributeDefinition...defs) {
@@ -297,29 +266,6 @@ public class TransformersTestCase extends AbstractSubsystemBaseTest {
         @Override
         protected ModelNode correctValue(ModelNode toResolve, boolean isWriteAttribute) {
             return new ModelNode(false);
-        }
-
-    }
-
-    private static class DiscardAttribute extends FailedOperationTransformationConfig.AttributesPathAddressConfig<DiscardAttribute>{
-
-        public DiscardAttribute(AttributeDefinition...defs) {
-            super(convert(defs));
-        }
-
-        @Override
-        protected boolean isAttributeWritable(String attributeName) {
-            return true;
-        }
-
-        @Override
-        protected boolean checkValue(String attrName, ModelNode attribute, boolean isWriteAttribute) {
-            return attribute.isDefined();
-        }
-
-        @Override
-        protected ModelNode correctValue(ModelNode toResolve, boolean isWriteAttribute) {
-            return new ModelNode();
         }
 
     }

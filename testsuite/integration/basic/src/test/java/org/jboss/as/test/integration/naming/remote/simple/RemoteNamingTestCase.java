@@ -33,7 +33,7 @@ import org.jboss.arquillian.container.test.api.RunAsClient;
 import org.jboss.arquillian.junit.Arquillian;
 import org.jboss.as.arquillian.api.ContainerResource;
 import org.jboss.as.arquillian.container.ManagementClient;
-import org.jboss.as.naming.JndiPermission;
+import org.wildfly.naming.java.permission.JndiPermission;
 import org.jboss.as.test.shared.integration.ejb.security.CallbackHandler;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
@@ -59,8 +59,6 @@ public class RemoteNamingTestCase {
     public static Archive<?> deploy() {
         final JavaArchive jar = ShrinkWrap.create(JavaArchive.class, "test.jar")
                 .addClasses(BindingEjb.class)
-                // dependency to org.jboss.as.naming module is used to grant JndiPermission
-                .addAsManifestResource(new StringAsset("Dependencies: org.jboss.as.naming\n"), "MANIFEST.MF")
                 // BindingEjb binds java:jboss/exported/test and java:jboss/exported/context/test
                 .addAsManifestResource(createPermissionsXmlAsset(
                         new JndiPermission("java:jboss/exported/test", "bind"),

@@ -22,9 +22,13 @@
 
 package org.jboss.as.test.clustering.cluster.ejb.remote;
 
+import static org.junit.Assert.*;
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.PropertyPermission;
 import java.util.concurrent.CancellationException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
@@ -33,6 +37,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.ejb.EJBException;
 import javax.naming.NamingException;
 
 import org.jboss.arquillian.container.test.api.Deployment;
@@ -43,6 +48,7 @@ import org.jboss.arquillian.junit.InSequence;
 import org.jboss.as.test.clustering.EJBClientContextSelector;
 import org.jboss.as.test.clustering.cluster.ClusterAbstractTestCase;
 import org.jboss.as.test.clustering.cluster.ejb.remote.bean.Incrementor;
+import org.jboss.as.test.clustering.cluster.ejb.remote.bean.InfinispanExceptionThrowingIncrementorBean;
 import org.jboss.as.test.clustering.cluster.ejb.remote.bean.Result;
 import org.jboss.as.test.clustering.cluster.ejb.remote.bean.SecureStatelessIncrementorBean;
 import org.jboss.as.test.clustering.cluster.ejb.remote.bean.SlowToDestroyStatefulIncrementorBean;
@@ -56,6 +62,7 @@ import org.jboss.ejb.client.EJBClientContext;
 import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
+import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.spec.JavaArchive;
 import org.junit.Assert;
 import org.junit.Ignore;
@@ -68,7 +75,6 @@ import org.junit.runner.RunWith;
  */
 @RunWith(Arquillian.class)
 @RunAsClient
-@Ignore("WFLY-3532")
 public class RemoteFailoverTestCase extends ClusterAbstractTestCase {
     private static final Logger log = Logger.getLogger(RemoteFailoverTestCase.class);
     private static final String MODULE_NAME = "remote-failover-test";
@@ -95,6 +101,10 @@ public class RemoteFailoverTestCase extends ClusterAbstractTestCase {
         final JavaArchive jar = ShrinkWrap.create(JavaArchive.class, MODULE_NAME + ".jar");
         jar.addPackage(Incrementor.class.getPackage());
         jar.addPackage(EJBDirectory.class.getPackage());
+        jar.setManifest(new StringAsset("Manifest-Version: 1.0\nDependencies: org.infinispan\n"));
+        jar.addAsManifestResource(createPermissionsXmlAsset(
+                new PropertyPermission(NODE_NAME_PROPERTY, "read")
+        ), "permissions.xml");
         log.info(jar.toString(true));
         return jar;
     }
@@ -128,7 +138,7 @@ public class RemoteFailoverTestCase extends ClusterAbstractTestCase {
 
             for (String node: NODES) {
                 int frequency = Collections.frequency(results, node);
-                Assert.assertTrue(String.valueOf(frequency) + " invocations were routed to " + node, frequency > 0);
+                assertTrue(String.valueOf(frequency) + " invocations were routed to " + node, frequency > 0);
             }
 
             undeploy(DEPLOYMENT_1);
@@ -155,7 +165,7 @@ public class RemoteFailoverTestCase extends ClusterAbstractTestCase {
 
             for (String node: NODES) {
                 int frequency = Collections.frequency(results, node);
-                Assert.assertTrue(String.valueOf(frequency) + " invocations were routed to " + node, frequency > 0);
+                assertTrue(String.valueOf(frequency) + " invocations were routed to " + node, frequency > 0);
             }
 
             stop(CONTAINER_2);
@@ -182,7 +192,7 @@ public class RemoteFailoverTestCase extends ClusterAbstractTestCase {
 
             for (String node: NODES) {
                 int frequency = Collections.frequency(results, node);
-                Assert.assertTrue(String.valueOf(frequency) + " invocations were routed to " + node, frequency > 0);
+                assertTrue(String.valueOf(frequency) + " invocations were routed to " + node, frequency > 0);
             }
         } finally {
             EJBClientContext.setSelector(selector);
@@ -280,9 +290,9 @@ public class RemoteFailoverTestCase extends ClusterAbstractTestCase {
         }
     }
 
-    // @Ignore("re-enable when WFLY-3532 resoolved")
     @InSequence(3)
     @Test
+    @Ignore("WFLY-3532")
     public void testConcurrentFailover() throws Exception {
         ContextSelector<EJBClientContext> selector = EJBClientContextSelector.setup(CLIENT_PROPERTIES);
         try (EJBDirectory directory = new RemoteEJBDirectory(MODULE_NAME)) {
@@ -361,6 +371,27 @@ public class RemoteFailoverTestCase extends ClusterAbstractTestCase {
         } finally {
             EJBClientContext.setSelector(selector);
         }
+    }
+
+    /**
+     * Test for WFLY-5788.
+     */
+    @InSequence(5)
+    @Test
+    public void testClientException() throws Exception {
+        ContextSelector<EJBClientContext> selector = EJBClientContextSelector.setup(CLIENT_PROPERTIES);
+        try (EJBDirectory context = new RemoteEJBDirectory(MODULE_NAME)) {
+            Incrementor bean = context.lookupStateful(InfinispanExceptionThrowingIncrementorBean.class, Incrementor.class);
+
+            bean.increment();
+        } catch (Exception ejbException) {
+            assertTrue("Expected exception wrapped in EJBException", ejbException instanceof EJBException);
+            assertNull("Cause of EJBException has not been removed", ejbException.getCause());
+            return;
+        } finally {
+            EJBClientContext.setSelector(selector);
+        }
+        fail("Expected EJBException but didn't catch it");
     }
 
     private class IncrementTask implements Runnable {

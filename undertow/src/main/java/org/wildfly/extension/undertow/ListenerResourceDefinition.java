@@ -32,12 +32,16 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 
+import io.undertow.UndertowOptions;
+import io.undertow.server.ConnectorStatistics;
+import org.jboss.as.controller.AbstractWriteAttributeHandler;
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.OperationStepHandler;
 import org.jboss.as.controller.PathElement;
 import org.jboss.as.controller.PersistentResourceDefinition;
+import org.jboss.as.controller.ReloadRequiredWriteAttributeHandler;
 import org.jboss.as.controller.SimpleAttributeDefinition;
 import org.jboss.as.controller.SimpleAttributeDefinitionBuilder;
 import org.jboss.as.controller.StringListAttributeDefinition;
@@ -52,11 +56,9 @@ import org.jboss.as.controller.registry.OperationEntry;
 import org.jboss.dmr.ModelNode;
 import org.jboss.dmr.ModelType;
 import org.jboss.msc.service.ServiceController;
+import org.jboss.msc.service.ServiceName;
 import org.wildfly.extension.io.OptionAttributeDefinition;
 import org.xnio.Options;
-
-import io.undertow.UndertowOptions;
-import io.undertow.server.ConnectorStatistics;
 
 /**
  * @author <a href="mailto:tomaz.cerar@redhat.com">Tomaz Cerar</a> (c) 2013 Red Hat Inc.
@@ -104,6 +106,7 @@ abstract class ListenerResourceDefinition extends PersistentResourceDefinition {
             .setAllowNull(true)
             .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
             .setAllowExpression(false)
+            .addAccessConstraint(SensitiveTargetAccessConstraintDefinition.SOCKET_BINDING_REF)
             .build();
 
     protected static final SimpleAttributeDefinition RESOLVE_PEER_ADDRESS = new SimpleAttributeDefinitionBuilder(Constants.RESOLVE_PEER_ADDRESS, ModelType.BOOLEAN)
@@ -121,7 +124,14 @@ abstract class ListenerResourceDefinition extends PersistentResourceDefinition {
             .setAllowExpression(true)
             .build();
 
-    public static final OptionAttributeDefinition BACKLOG = OptionAttributeDefinition.builder("tcp-backlog", Options.BACKLOG).setAllowExpression(true).build();
+    protected static final SimpleAttributeDefinition SECURE = new SimpleAttributeDefinitionBuilder(Constants.SECURE, ModelType.BOOLEAN)
+            .setDefaultValue(new ModelNode(false))
+            .setAllowNull(true)
+            .setFlags(AttributeAccess.Flag.RESTART_RESOURCE_SERVICES)
+            .setAllowExpression(true)
+            .build();
+
+    public static final OptionAttributeDefinition BACKLOG = OptionAttributeDefinition.builder("tcp-backlog", Options.BACKLOG).setDefaultValue(new ModelNode(10000)).setAllowExpression(true).build();
     public static final OptionAttributeDefinition RECEIVE_BUFFER = OptionAttributeDefinition.builder("receive-buffer", Options.RECEIVE_BUFFER).setAllowExpression(true).build();
     public static final OptionAttributeDefinition SEND_BUFFER = OptionAttributeDefinition.builder("send-buffer", Options.SEND_BUFFER).setAllowExpression(true).build();
     public static final OptionAttributeDefinition KEEP_ALIVE = OptionAttributeDefinition.builder("tcp-keep-alive", Options.KEEP_ALIVE).setAllowExpression(true).build();
@@ -132,7 +142,7 @@ abstract class ListenerResourceDefinition extends PersistentResourceDefinition {
 
     public static final OptionAttributeDefinition MAX_HEADER_SIZE = OptionAttributeDefinition.builder("max-header-size", UndertowOptions.MAX_HEADER_SIZE).setDefaultValue(new ModelNode(UndertowOptions.DEFAULT_MAX_HEADER_SIZE)).setAllowExpression(true).build();
     public static final OptionAttributeDefinition MAX_ENTITY_SIZE = OptionAttributeDefinition.builder(Constants.MAX_POST_SIZE, UndertowOptions.MAX_ENTITY_SIZE).setDefaultValue(new ModelNode(10485760L)).setAllowExpression(true).build();
-    public static final OptionAttributeDefinition BUFFER_PIPELINED_DATA = OptionAttributeDefinition.builder("buffer-pipelined-data", UndertowOptions.BUFFER_PIPELINED_DATA).setDefaultValue(new ModelNode(true)).setAllowExpression(true).build();
+    public static final OptionAttributeDefinition BUFFER_PIPELINED_DATA = OptionAttributeDefinition.builder("buffer-pipelined-data", UndertowOptions.BUFFER_PIPELINED_DATA).setDefaultValue(new ModelNode(false)).setAllowExpression(true).build();
     public static final OptionAttributeDefinition MAX_PARAMETERS = OptionAttributeDefinition.builder("max-parameters", UndertowOptions.MAX_PARAMETERS).setDefaultValue(new ModelNode(1000)).setAllowExpression(true).build();
     public static final OptionAttributeDefinition MAX_HEADERS = OptionAttributeDefinition.builder("max-headers", UndertowOptions.MAX_HEADERS).setDefaultValue(new ModelNode(200)).setAllowExpression(true).build();
     public static final OptionAttributeDefinition MAX_COOKIES = OptionAttributeDefinition.builder("max-cookies", UndertowOptions.MAX_COOKIES).setDefaultValue(new ModelNode(200)).setAllowExpression(true).build();
@@ -143,7 +153,7 @@ abstract class ListenerResourceDefinition extends PersistentResourceDefinition {
     public static final OptionAttributeDefinition MAX_BUFFERED_REQUEST_SIZE = OptionAttributeDefinition.builder(Constants.MAX_BUFFERED_REQUEST_SIZE, UndertowOptions.MAX_BUFFERED_REQUEST_SIZE).setDefaultValue(new ModelNode(16384)).setAllowExpression(true).build();
     public static final OptionAttributeDefinition RECORD_REQUEST_START_TIME = OptionAttributeDefinition.builder("record-request-start-time", UndertowOptions.RECORD_REQUEST_START_TIME).setDefaultValue(new ModelNode(false)).setAllowExpression(true).build();
     public static final OptionAttributeDefinition ALLOW_EQUALS_IN_COOKIE_VALUE = OptionAttributeDefinition.builder("allow-equals-in-cookie-value", UndertowOptions.ALLOW_EQUALS_IN_COOKIE_VALUE).setDefaultValue(new ModelNode(false)).setAllowExpression(true).build();
-    public static final OptionAttributeDefinition NO_REQUEST_TIMEOUT = OptionAttributeDefinition.builder("no-request-timeout", UndertowOptions.NO_REQUEST_TIMEOUT).setMeasurementUnit(MeasurementUnit.MILLISECONDS).setAllowNull(true).setAllowExpression(true).build();
+    public static final OptionAttributeDefinition NO_REQUEST_TIMEOUT = OptionAttributeDefinition.builder("no-request-timeout", UndertowOptions.NO_REQUEST_TIMEOUT).setDefaultValue(new ModelNode(60000)).setMeasurementUnit(MeasurementUnit.MILLISECONDS).setAllowNull(true).setAllowExpression(true).build();
     public static final OptionAttributeDefinition REQUEST_PARSE_TIMEOUT = OptionAttributeDefinition.builder("request-parse-timeout", UndertowOptions.REQUEST_PARSE_TIMEOUT).setMeasurementUnit(MeasurementUnit.MILLISECONDS).setAllowNull(true).setAllowExpression(true).build();
 
     public enum ConnectorStat {
@@ -195,7 +205,7 @@ abstract class ListenerResourceDefinition extends PersistentResourceDefinition {
     public static final List<OptionAttributeDefinition> SOCKET_OPTIONS = Arrays.asList(BACKLOG, RECEIVE_BUFFER, SEND_BUFFER, KEEP_ALIVE, READ_TIMEOUT, WRITE_TIMEOUT, MAX_CONNECTIONS);
 
     static {
-        ATTRIBUTES = new LinkedHashSet<AttributeDefinition>(Arrays.asList(SOCKET_BINDING, WORKER, BUFFER_POOL, ENABLED, RESOLVE_PEER_ADDRESS, DISALLOWED_METHODS));
+        ATTRIBUTES = new LinkedHashSet<AttributeDefinition>(Arrays.asList(SOCKET_BINDING, WORKER, BUFFER_POOL, ENABLED, RESOLVE_PEER_ADDRESS, DISALLOWED_METHODS, SECURE));
         ATTRIBUTES.addAll(LISTENER_OPTIONS);
         ATTRIBUTES.addAll(SOCKET_OPTIONS);
     }
@@ -220,7 +230,16 @@ abstract class ListenerResourceDefinition extends PersistentResourceDefinition {
 
     @Override
     public void registerAttributes(ManagementResourceRegistration resourceRegistration) {
-        super.registerAttributes(resourceRegistration);
+        // DO NOT call super, as we need non-standard handling for enabled
+
+        Collection<AttributeDefinition> ads = getAttributes();
+        OperationStepHandler rrh = new ReloadRequiredWriteAttributeHandler(ads); // we include ENABLED in this set, but it doesn't matter we don't register rrh for it
+        OperationStepHandler enh = new EnabledAttributeHandler();
+        for (AttributeDefinition ad : ads) {
+            OperationStepHandler osh = ad == ENABLED ? enh : rrh;
+            resourceRegistration.registerReadWriteAttribute(ad, null, osh);
+        }
+
         for(ConnectorStat attr : ConnectorStat.values()) {
             resourceRegistration.registerMetric(attr.definition, ReadStatisticHandler.INSTANCE);
         }
@@ -284,5 +303,47 @@ abstract class ListenerResourceDefinition extends PersistentResourceDefinition {
     @Override
     public void registerCapabilities(ManagementResourceRegistration resourceRegistration) {
         resourceRegistration.registerCapability(LISTENER_CAPABILITY);
+    }
+
+    private static class EnabledAttributeHandler extends AbstractWriteAttributeHandler<Boolean> {
+        @Override
+        protected boolean applyUpdateToRuntime(OperationContext context, ModelNode operation, String attributeName, ModelNode resolvedValue, ModelNode currentValue, HandbackHolder<Boolean> handbackHolder) throws OperationFailedException {
+
+            final ServiceName listenerServiceName = UndertowService.listenerName(context.getCurrentAddressValue());
+
+            boolean enabled = resolvedValue.asBoolean();
+            // We don't try and analyze currentValue to see if we were already enabled, as the resolution result
+            // may be different now than it was before (different system props, or vault contents)
+            // Instead we consider the previous setting to be enabled if the service Mode != Mode.NEVER
+            final ServiceController<?> controller = context.getServiceRegistry(true).getRequiredService(listenerServiceName);
+            boolean currentEnabled = controller.getMode() != ServiceController.Mode.NEVER;
+
+            if (enabled) {
+                if (!currentEnabled) {
+                    // It's safe to enable
+                    controller.setMode(ServiceController.Mode.ACTIVE);
+                }
+                // Pass the current setting into the handback so it knows whether or not to revert anything
+                handbackHolder.setHandback(currentEnabled);
+                return false;
+            } else if (currentEnabled) {
+                // going from enabled to disabled requires reload
+                return true;
+            } else {
+                // tell revertUpdateToRuntime it doesn't need to revert anything since we did nothing
+                handbackHolder.setHandback(true);
+                return false;
+            }
+        }
+
+        @Override
+        protected void revertUpdateToRuntime(OperationContext context, ModelNode operation, String attributeName, ModelNode valueToRestore, ModelNode valueToRevert, Boolean handback) throws OperationFailedException {
+            if (handback != null && !handback) {
+                // applyUpdateToRuntime changed from disabled to enabled
+                final ServiceName listenerServiceName = UndertowService.listenerName(context.getCurrentAddressValue());
+                context.getServiceRegistry(true).getRequiredService(listenerServiceName).setMode(ServiceController.Mode.NEVER);
+            } // else applyUpdateToRuntime did nothing as the service was already in the desired state
+              // So we do nothing as well
+        }
     }
 }

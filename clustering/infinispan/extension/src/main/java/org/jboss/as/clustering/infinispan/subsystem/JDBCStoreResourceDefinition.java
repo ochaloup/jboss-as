@@ -24,13 +24,13 @@ package org.jboss.as.clustering.infinispan.subsystem;
 
 import java.util.Arrays;
 
-import javax.sql.DataSource;
-
 import org.infinispan.persistence.jdbc.DatabaseType;
 import org.jboss.as.clustering.controller.CapabilityReference;
-import org.jboss.as.clustering.controller.RequiredCapability;
+import org.jboss.as.clustering.controller.CommonUnaryRequirement;
+import org.jboss.as.clustering.controller.transform.LegacyPropertyAddOperationTransformer;
 import org.jboss.as.clustering.controller.transform.SimpleAttributeConverter;
 import org.jboss.as.clustering.controller.transform.SimpleAttributeConverter.Converter;
+import org.jboss.as.clustering.controller.transform.SimpleOperationTransformer;
 import org.jboss.as.clustering.controller.validation.EnumValidatorBuilder;
 import org.jboss.as.clustering.controller.validation.ParameterValidatorBuilder;
 import org.jboss.as.clustering.infinispan.InfinispanLogger;
@@ -62,12 +62,12 @@ import org.jboss.dmr.ModelType;
 public abstract class JDBCStoreResourceDefinition extends StoreResourceDefinition {
 
     enum Capability implements org.jboss.as.clustering.controller.Capability {
-        DATA_SOURCE("org.wildfly.clustering.infinispan.cache-container.cache.store.jdbc.data-source", DataSource.class),
+        DATA_SOURCE("org.wildfly.clustering.infinispan.cache-container.cache.store.jdbc.data-source"),
         ;
         private final RuntimeCapability<Void> definition;
 
-        Capability(String name, Class<?> serviceType) {
-            this.definition = RuntimeCapability.Builder.of(name, true).setServiceType(serviceType).build();
+        Capability(String name) {
+            this.definition = RuntimeCapability.Builder.of(name, true).build();
         }
 
         @Override
@@ -76,7 +76,7 @@ public abstract class JDBCStoreResourceDefinition extends StoreResourceDefinitio
         }
 
         @Override
-        public RuntimeCapability<Void> getRuntimeCapability(PathAddress address) {
+        public RuntimeCapability<Void> resolve(PathAddress address) {
             PathAddress cacheAddress = address.getParent();
             PathAddress containerAddress = cacheAddress.getParent();
             return this.definition.fromBaseCapability(containerAddress.getLastElement().getValue() + "." + cacheAddress.getLastElement().getValue());
@@ -84,7 +84,7 @@ public abstract class JDBCStoreResourceDefinition extends StoreResourceDefinitio
     }
 
     enum Attribute implements org.jboss.as.clustering.controller.Attribute {
-        DATA_SOURCE("data-source", ModelType.STRING, new CapabilityReference(RequiredCapability.DATA_SOURCE, Capability.DATA_SOURCE)),
+        DATA_SOURCE("data-source", ModelType.STRING, new CapabilityReference(Capability.DATA_SOURCE, CommonUnaryRequirement.DATA_SOURCE)),
         DIALECT("dialect", ModelType.STRING, new EnumValidatorBuilder<>(DatabaseType.class)),
         ;
         private final AttributeDefinition definition;
@@ -133,7 +133,7 @@ public abstract class JDBCStoreResourceDefinition extends StoreResourceDefinitio
             Converter converter = new Converter() {
                 @Override
                 public void convert(PathAddress address, String name, ModelNode value, ModelNode model, TransformationContext context) {
-                    if (!value.isDefined()) {
+                    if (value.isDefined()) {
                         PathAddress rootAddress = address.subAddress(0, address.size() - 4);
                         PathAddress subsystemAddress = rootAddress.append(PathElement.pathElement(ModelDescriptionConstants.SUBSYSTEM, "datasources"));
                         Resource subsystem = context.readResourceFromRoot(subsystemAddress);
@@ -155,6 +155,11 @@ public abstract class JDBCStoreResourceDefinition extends StoreResourceDefinitio
                     .addRename(Attribute.DATA_SOURCE.getDefinition().getName(), DeprecatedAttribute.DATASOURCE.getDefinition().getName())
                     .setValueConverter(new SimpleAttributeConverter(converter), Attribute.DATA_SOURCE.getDefinition())
             ;
+        }
+
+        if (InfinispanModel.VERSION_3_0_0.requiresTransformation(version)) {
+            builder.addOperationTransformationOverride(ModelDescriptionConstants.ADD)
+                    .setCustomOperationTransformer(new SimpleOperationTransformer(new LegacyPropertyAddOperationTransformer())).inheritResourceAttributeDefinitions();
         }
 
         if (InfinispanModel.VERSION_2_0_0.requiresTransformation(version)) {

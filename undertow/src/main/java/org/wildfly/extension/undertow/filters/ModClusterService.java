@@ -1,6 +1,7 @@
 package org.wildfly.extension.undertow.filters;
 
 import io.undertow.Handlers;
+import io.undertow.UndertowOptions;
 import io.undertow.client.UndertowClient;
 import io.undertow.predicate.PredicateParser;
 import io.undertow.protocols.ssl.UndertowXnioSsl;
@@ -63,8 +64,23 @@ public class ModClusterService extends FilterService {
 
     private ModCluster modCluster;
     private MCMPConfig config;
+    private final OptionMap clientOptions;
 
-    ModClusterService(ModelNode model, long healthCheckInterval, int maxRequestTime, long removeBrokenNodes, int advertiseFrequency, String advertisePath, String advertiseProtocol, String securityKey, Predicate managementAccessPredicate, int connectionsPerThread, int cachedConnections, int connectionIdleTimeout, int requestQueueSize, boolean useAlias) {
+    ModClusterService(ModelNode model,
+                      long healthCheckInterval,
+                      int maxRequestTime,
+                      long removeBrokenNodes,
+                      int advertiseFrequency,
+                      String advertisePath,
+                      String advertiseProtocol,
+                      String securityKey,
+                      Predicate managementAccessPredicate,
+                      int connectionsPerThread,
+                      int cachedConnections,
+                      int connectionIdleTimeout,
+                      int requestQueueSize,
+                      boolean useAlias,
+                      OptionMap clientOptions) {
         super(ModClusterDefinition.INSTANCE, model);
         this.healthCheckInterval = healthCheckInterval;
         this.maxRequestTime = maxRequestTime;
@@ -79,6 +95,7 @@ public class ModClusterService extends FilterService {
         this.connectionIdleTimeout = connectionIdleTimeout;
         this.requestQueueSize = requestQueueSize;
         this.useAlias = useAlias;
+        this.clientOptions = clientOptions;
     }
 
     @Override
@@ -102,6 +119,7 @@ public class ModClusterService extends FilterService {
             XnioSsl xnioSsl = new UndertowXnioSsl(worker.getXnio(), combined, sslContext);
             modClusterBuilder = ModCluster.builder(worker, UndertowClient.getInstance(), xnioSsl);
         }
+        modClusterBuilder.setClientOptions(clientOptions);
         modClusterBuilder.setHealthCheckInterval(healthCheckInterval)
                 .setMaxRequestTime(maxRequestTime)
                 .setCacheConnections(cachedConnections)
@@ -124,13 +142,13 @@ public class ModClusterService extends FilterService {
             builder.enableAdvertise()
                     .setAdvertiseAddress(advertiseSocketBinding.getValue().getSocketAddress().getAddress().getHostAddress())
                     .setAdvertiseGroup(multicastAddress.getHostAddress())
-                    .setAdvertisePort(advertiseSocketBinding.getValue().getPort())
+                    .setAdvertisePort(advertiseSocketBinding.getValue().getMulticastPort())
                     .setAdvertiseFrequency(advertiseFrequency)
                     .setPath(advertisePath)
                     .setProtocol(advertiseProtocol)
                     .setSecurityKey(securityKey);
         }
-        builder.setManagementHost(managementSocketBinding.getValue().getSocketAddress().getHostName());
+        builder.setManagementHost(managementSocketBinding.getValue().getSocketAddress().getHostString());
         builder.setManagementPort(managementSocketBinding.getValue().getSocketAddress().getPort());
 
         config = builder.build();
@@ -161,23 +179,24 @@ public class ModClusterService extends FilterService {
         //to specify the next handler. To get around this we invoke the mod_proxy handler
         //and then if it has not dispatched or handled the request then we know that we can
         //just pass it on to the next handler
-        final HttpHandler mcmp = managementAccessPredicate != null  ? Handlers.predicate(managementAccessPredicate, config.create(modCluster, next), next)  :  config.create(modCluster, next);
         final HttpHandler proxyHandler = modCluster.getProxyHandler();
-        HttpHandler theHandler = new HttpHandler() {
+        final HttpHandler realNext = new HttpHandler() {
             @Override
             public void handleRequest(HttpServerExchange exchange) throws Exception {
                 proxyHandler.handleRequest(exchange);
                 if(!exchange.isDispatched() && !exchange.isComplete()) {
-                    exchange.setResponseCode(200);
-                    mcmp.handleRequest(exchange);
+                    exchange.setStatusCode(200);
+                    next.handleRequest(exchange);
                 }
             }
         };
+        final HttpHandler mcmp = managementAccessPredicate != null  ? Handlers.predicate(managementAccessPredicate, config.create(modCluster, realNext), next)  :  config.create(modCluster, realNext);
+
         UndertowLogger.ROOT_LOGGER.debug("HttpHandler for mod_cluster MCMP created.");
         if (predicate != null) {
-            return new PredicateHandler(predicate, theHandler, next);
+            return new PredicateHandler(predicate, mcmp, next);
         } else {
-            return theHandler;
+            return mcmp;
         }
     }
 
@@ -199,6 +218,19 @@ public class ModClusterService extends FilterService {
         }
         final ModelNode securityRealm = ModClusterDefinition.SECURITY_REALM.resolveModelAttribute(operationContext, model);
 
+        final ModelNode packetSizeNode = ModClusterDefinition.MAX_AJP_PACKET_SIZE.resolveModelAttribute(operationContext, model);
+        OptionMap.Builder builder = OptionMap.builder();
+        if(packetSizeNode.isDefined()) {
+            builder.set(UndertowOptions.MAX_AJP_PACKET_SIZE, packetSizeNode.asInt());
+        }
+        builder.set(UndertowOptions.ENABLE_HTTP2, ModClusterDefinition.ENABLE_HTTP2.resolveModelAttribute(operationContext, model).asBoolean());
+        ModClusterDefinition.HTTP2_ENABLE_PUSH.resolveOption(operationContext, model, builder);
+        ModClusterDefinition.HTTP2_HEADER_TABLE_SIZE.resolveOption(operationContext, model, builder);
+        ModClusterDefinition.HTTP2_INITIAL_WINDOW_SIZE.resolveOption(operationContext, model, builder);
+        ModClusterDefinition.HTTP2_MAX_CONCURRENT_STREAMS.resolveOption(operationContext, model, builder);
+        ModClusterDefinition.HTTP2_MAX_FRAME_SIZE.resolveOption(operationContext, model, builder);
+        ModClusterDefinition.HTTP2_MAX_HEADER_LIST_SIZE.resolveOption(operationContext, model, builder);
+
         ModClusterService service = new ModClusterService(model,
                 ModClusterDefinition.HEALTH_CHECK_INTERVAL.resolveModelAttribute(operationContext, model).asInt(),
                 ModClusterDefinition.MAX_REQUEST_TIME.resolveModelAttribute(operationContext, model).asInt(),
@@ -211,17 +243,18 @@ public class ModClusterService extends FilterService {
                 ModClusterDefinition.CACHED_CONNECTIONS_PER_THREAD.resolveModelAttribute(operationContext, model).asInt(),
                 ModClusterDefinition.CONNECTION_IDLE_TIMEOUT.resolveModelAttribute(operationContext, model).asInt(),
                 ModClusterDefinition.REQUEST_QUEUE_SIZE.resolveModelAttribute(operationContext, model).asInt(),
-                ModClusterDefinition.USE_ALIAS.resolveModelAttribute(operationContext, model).asBoolean());
-        ServiceBuilder<FilterService> builder = serviceTarget.addService(UndertowService.FILTER.append(name), service);
-        builder.addDependency(SocketBinding.JBOSS_BINDING_NAME.append(ModClusterDefinition.MANAGEMENT_SOCKET_BINDING.resolveModelAttribute(operationContext, model).asString()), SocketBinding.class, service.managementSocketBinding);
-        builder.addDependency(SocketBinding.JBOSS_BINDING_NAME.append(ModClusterDefinition.ADVERTISE_SOCKET_BINDING.resolveModelAttribute(operationContext, model).asString()), SocketBinding.class, service.advertiseSocketBinding);
-        builder.addDependency(IOServices.WORKER.append(ModClusterDefinition.WORKER.resolveModelAttribute(operationContext, model).asString()), XnioWorker.class, service.workerInjectedValue);
+                ModClusterDefinition.USE_ALIAS.resolveModelAttribute(operationContext, model).asBoolean(),
+                builder.getMap());
+        ServiceBuilder<FilterService> serviceBuilder = serviceTarget.addService(UndertowService.FILTER.append(name), service);
+        serviceBuilder.addDependency(SocketBinding.JBOSS_BINDING_NAME.append(ModClusterDefinition.MANAGEMENT_SOCKET_BINDING.resolveModelAttribute(operationContext, model).asString()), SocketBinding.class, service.managementSocketBinding);
+        serviceBuilder.addDependency(SocketBinding.JBOSS_BINDING_NAME.append(ModClusterDefinition.ADVERTISE_SOCKET_BINDING.resolveModelAttribute(operationContext, model).asString()), SocketBinding.class, service.advertiseSocketBinding);
+        serviceBuilder.addDependency(IOServices.WORKER.append(ModClusterDefinition.WORKER.resolveModelAttribute(operationContext, model).asString()), XnioWorker.class, service.workerInjectedValue);
 
         if(securityRealm.isDefined()) {
-            SecurityRealm.ServiceUtil.addDependency(builder, service.securityRealm, securityRealm.asString(), false);
+            SecurityRealm.ServiceUtil.addDependency(serviceBuilder, service.securityRealm, securityRealm.asString(), false);
         }
 
-        return builder.install();
+        return serviceBuilder.install();
     }
 
     public ModCluster getModCluster() {

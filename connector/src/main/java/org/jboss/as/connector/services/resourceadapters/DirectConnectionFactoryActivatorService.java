@@ -36,8 +36,10 @@ import org.jboss.as.connector.services.mdr.AS7MetadataRepository;
 import org.jboss.as.connector.services.resourceadapters.deployment.registry.ResourceAdapterDeploymentRegistry;
 import org.jboss.as.connector.subsystems.jca.JcaSubsystemConfiguration;
 import org.jboss.as.connector.util.ConnectorServices;
+import org.jboss.as.core.security.ServerSecurityManager;
 import org.jboss.as.naming.deployment.ContextNames;
 import org.jboss.as.naming.service.NamingService;
+import org.jboss.as.security.service.SimpleSecurityManagerService;
 import org.jboss.as.security.service.SubjectFactoryService;
 import org.jboss.as.txn.service.TxnServices;
 import org.jboss.jca.common.api.metadata.Defaults;
@@ -202,11 +204,11 @@ public class DirectConnectionFactoryActivatorService implements Service<ContextN
             if (transactionSupport == TransactionSupport.TransactionSupportLevel.XATransaction) {
                 pool = new XaPoolImpl(minPoolSize < 0 ? Defaults.MIN_POOL_SIZE : minPoolSize, Defaults.INITIAL_POOL_SIZE, maxPoolSize < 0 ? Defaults.MAX_POOL_SIZE : maxPoolSize,
                         Defaults.PREFILL, Defaults.USE_STRICT_MIN, Defaults.FLUSH_STRATEGY,
-                        null, Defaults.IS_SAME_RM_OVERRIDE, Defaults.INTERLEAVING, Defaults.PAD_XID, Defaults.WRAP_XA_RESOURCE, Defaults.NO_TX_SEPARATE_POOL);
+                        null, Defaults.FAIR, Defaults.IS_SAME_RM_OVERRIDE, Defaults.INTERLEAVING, Defaults.PAD_XID, Defaults.WRAP_XA_RESOURCE, Defaults.NO_TX_SEPARATE_POOL);
                 isXA = Boolean.TRUE;
             } else {
                 pool = new PoolImpl(minPoolSize < 0 ? Defaults.MIN_POOL_SIZE : minPoolSize, Defaults.INITIAL_POOL_SIZE, maxPoolSize < 0 ? Defaults.MAX_POOL_SIZE : maxPoolSize,
-                        Defaults.PREFILL, Defaults.USE_STRICT_MIN, Defaults.FLUSH_STRATEGY, null);
+                        Defaults.PREFILL, Defaults.USE_STRICT_MIN, Defaults.FLUSH_STRATEGY, null, Defaults.FAIR);
             }
 
             TransactionSupportEnum transactionSupportValue = TransactionSupportEnum.NoTransaction;
@@ -245,6 +247,8 @@ public class DirectConnectionFactoryActivatorService implements Service<ContextN
                             JcaSubsystemConfiguration.class, activator.getConfigInjector())
                     .addDependency(SubjectFactoryService.SERVICE_NAME, SubjectFactory.class,
                             activator.getSubjectFactoryInjector())
+                    .addDependency(SimpleSecurityManagerService.SERVICE_NAME,
+                            ServerSecurityManager.class, activator.getServerSecurityManager())
                     .addDependency(ConnectorServices.CCM_SERVICE, CachedConnectionManager.class,
                             activator.getCcmInjector())
                     .addDependency(NamingService.SERVICE_NAME)

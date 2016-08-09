@@ -29,8 +29,10 @@ import java.util.LinkedList;
 
 import io.undertow.UndertowOptions;
 import org.jboss.as.controller.AttributeDefinition;
+import org.jboss.as.controller.ModelVersion;
 import org.jboss.as.controller.SimpleAttributeDefinition;
 import org.jboss.as.controller.SimpleAttributeDefinitionBuilder;
+import org.jboss.as.controller.access.management.SensitiveTargetAccessConstraintDefinition;
 import org.jboss.as.controller.client.helpers.MeasurementUnit;
 import org.jboss.as.controller.operations.validation.EnumValidator;
 import org.jboss.as.controller.operations.validation.StringLengthValidator;
@@ -54,6 +56,7 @@ public class HttpsListenerResourceDefinition extends ListenerResourceDefinition 
             .setAllowNull(false)
             .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
             .setValidator(new StringLengthValidator(1))
+            .setAccessConstraints(SensitiveTargetAccessConstraintDefinition.SECURITY_REALM_REF)
             .build();
     protected static final OptionAttributeDefinition VERIFY_CLIENT = OptionAttributeDefinition.builder(Constants.VERIFY_CLIENT, SSL_CLIENT_AUTH_MODE)
             .setAllowNull(true)
@@ -84,6 +87,7 @@ public class HttpsListenerResourceDefinition extends ListenerResourceDefinition 
 
     protected static final OptionAttributeDefinition ENABLE_SPDY = OptionAttributeDefinition.builder(Constants.ENABLE_SPDY, UndertowOptions.ENABLE_SPDY)
             .setAllowNull(true)
+            .setDeprecated(ModelVersion.create(3, 2))
             .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
             .setAllowExpression(true)
             .setDefaultValue(new ModelNode(false))
@@ -107,6 +111,12 @@ public class HttpsListenerResourceDefinition extends ListenerResourceDefinition 
         res.add(ENABLE_SPDY);
         res.add(SSL_SESSION_CACHE_SIZE);
         res.add(SSL_SESSION_TIMEOUT);
+        res.add(HttpListenerResourceDefinition.HTTP2_ENABLE_PUSH);
+        res.add(HttpListenerResourceDefinition.HTTP2_HEADER_TABLE_SIZE);
+        res.add(HttpListenerResourceDefinition.HTTP2_INITIAL_WINDOW_SIZE);
+        res.add(HttpListenerResourceDefinition.HTTP2_MAX_CONCURRENT_STREAMS);
+        res.add(HttpListenerResourceDefinition.HTTP2_MAX_HEADER_LIST_SIZE);
+        res.add(HttpListenerResourceDefinition.HTTP2_MAX_FRAME_SIZE);
         return res;
     }
 

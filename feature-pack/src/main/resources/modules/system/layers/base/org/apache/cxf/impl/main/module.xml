@@ -35,6 +35,7 @@
         <artifact name="${org.apache.cxf:cxf-rt-bindings-xml}"/>
         <artifact name="${org.apache.cxf:cxf-rt-databinding-aegis}"/>
         <artifact name="${org.apache.cxf:cxf-rt-databinding-jaxb}"/>
+        <artifact name="${org.apache.cxf:cxf-rt-features-clustering}"/>
         <artifact name="${org.apache.cxf:cxf-rt-frontend-jaxws}"/>
         <artifact name="${org.apache.cxf:cxf-rt-frontend-simple}"/>
         <artifact name="${org.apache.cxf:cxf-rt-management}"/>
@@ -49,18 +50,18 @@
         <artifact name="${org.apache.cxf:cxf-rt-ws-mex}"/>
         <artifact name="${org.apache.cxf:cxf-rt-ws-policy}"/>
         <artifact name="${org.apache.cxf:cxf-rt-ws-rm}"/>
-        <artifact name="${org.apache.cxf:cxf-rt-ws-security?jandex}"/>
         <artifact name="${org.apache.cxf:cxf-tools-common}"/>
         <artifact name="${org.apache.cxf:cxf-tools-java2ws}"/>
         <artifact name="${org.apache.cxf:cxf-tools-validator}"/>
         <artifact name="${org.apache.cxf:cxf-tools-wsdlto-core}"/>
         <artifact name="${org.apache.cxf:cxf-tools-wsdlto-databinding-jaxb}"/>
         <artifact name="${org.apache.cxf:cxf-tools-wsdlto-frontend-jaxws}"/>
-        <artifact name="${org.apache.cxf.services.sts:cxf-services-sts-core}"/>
         <artifact name="${org.apache.cxf.services.ws-discovery:cxf-services-ws-discovery-api}"/>
         <artifact name="${org.apache.cxf.xjcplugins:cxf-xjc-boolean}"/>
+        <artifact name="${org.apache.cxf.xjcplugins:cxf-xjc-bug986}"/>
         <artifact name="${org.apache.cxf.xjcplugins:cxf-xjc-dv}"/>
         <artifact name="${org.apache.cxf.xjcplugins:cxf-xjc-ts}"/>
+        <artifact name="${org.apache.cxf.xjc-utils:cxf-xjc-runtime}"/>
     </resources>
 
     <dependencies>
@@ -90,6 +91,26 @@
         <module name="org.joda.time" />
         <module name="org.opensaml" />
         <module name="org.apache.cxf" export="true">
+          <imports>
+            <include path="META-INF/cxf"/>
+            <include path="META-INF"/>
+          </imports>
+          <exports>
+            <include path="META-INF/cxf"/>
+            <include path="META-INF"/>
+          </exports>
+        </module>
+        <module name="org.apache.cxf.ws-security" export="true" services="export">
+          <imports>
+            <include path="META-INF/cxf"/>
+            <include path="META-INF"/>
+          </imports>
+          <exports>
+            <include path="META-INF/cxf"/>
+            <include path="META-INF"/>
+          </exports>
+        </module>
+        <module name="org.apache.cxf.services-sts" export="true" services="export">
           <imports>
             <include path="META-INF/cxf"/>
             <include path="META-INF"/>

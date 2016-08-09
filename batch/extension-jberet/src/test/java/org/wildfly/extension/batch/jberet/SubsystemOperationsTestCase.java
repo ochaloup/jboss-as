@@ -25,8 +25,13 @@ package org.wildfly.extension.batch.jberet;
 import java.io.IOException;
 import java.util.concurrent.TimeUnit;
 
+import org.jboss.as.controller.capability.registry.RuntimeCapabilityRegistry;
 import org.jboss.as.controller.client.Operation;
 import org.jboss.as.controller.client.helpers.Operations.CompositeOperationBuilder;
+import org.jboss.as.controller.extension.ExtensionRegistry;
+import org.jboss.as.controller.registry.ManagementResourceRegistration;
+import org.jboss.as.controller.registry.Resource;
+import org.jboss.as.subsystem.test.AdditionalInitialization;
 import org.jboss.as.subsystem.test.KernelServices;
 import org.jboss.as.subsystem.test.SubsystemOperations;
 import org.jboss.dmr.ModelNode;
@@ -47,6 +52,18 @@ public class SubsystemOperationsTestCase extends AbstractBatchTestCase {
     @Override
     protected String getSubsystemXml() throws IOException {
         return readResource("/default-subsystem.xml");
+    }
+
+    @Override
+    protected AdditionalInitialization createAdditionalInitialization() {
+        return new AdditionalInitialization() {
+
+            @Override
+            protected void initializeExtraSubystemsAndModel(ExtensionRegistry extensionRegistry, Resource rootResource, ManagementResourceRegistration rootRegistration, RuntimeCapabilityRegistry capabilityRegistry) {
+                super.initializeExtraSubystemsAndModel(extensionRegistry, rootResource, rootRegistration, capabilityRegistry);
+                registerCapabilities(capabilityRegistry, "org.wildfly.batch.thread.pool.new-job-repo");
+            }
+        };
     }
 
     @Test

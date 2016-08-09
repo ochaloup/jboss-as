@@ -25,6 +25,7 @@ package org.jboss.as.ejb3.deployment.processors;
 
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Locale;
 import java.util.Map;
@@ -39,15 +40,15 @@ import org.jboss.as.ee.component.EEModuleDescription;
 import org.jboss.as.ee.metadata.MetadataCompleteMarker;
 import org.jboss.as.ee.structure.JBossDescriptorPropertyReplacement;
 import org.jboss.as.ee.structure.SpecDescriptorPropertyReplacement;
-import org.jboss.as.ejb3.clustering.EJBBoundClusteringMetaDataParser11;
-import org.jboss.as.ejb3.logging.EjbLogger;
 import org.jboss.as.ejb3.cache.EJBBoundCacheParser;
+import org.jboss.as.ejb3.clustering.ClusteringSchema;
 import org.jboss.as.ejb3.clustering.EJBBoundClusteringMetaDataParser;
 import org.jboss.as.ejb3.deliveryactive.parser.EJBBoundMdbDeliveryMetaDataParser;
 import org.jboss.as.ejb3.deliveryactive.parser.EJBBoundMdbDeliveryMetaDataParser11;
 import org.jboss.as.ejb3.deployment.EjbDeploymentAttachmentKeys;
 import org.jboss.as.ejb3.deployment.EjbJarDescription;
 import org.jboss.as.ejb3.interceptor.ContainerInterceptorsParser;
+import org.jboss.as.ejb3.logging.EjbLogger;
 import org.jboss.as.ejb3.pool.EJBBoundPoolParser;
 import org.jboss.as.ejb3.resourceadapterbinding.parser.EJBBoundResourceAdapterBindingMetaDataParser;
 import org.jboss.as.ejb3.security.parser.EJBBoundSecurityMetaDataParser;
@@ -66,7 +67,9 @@ import org.jboss.metadata.ejb.parser.jboss.ejb3.JBossEjb3MetaDataParser;
 import org.jboss.metadata.ejb.parser.jboss.ejb3.TransactionTimeoutMetaDataParser;
 import org.jboss.metadata.ejb.parser.spec.AbstractMetaDataParser;
 import org.jboss.metadata.ejb.parser.spec.EjbJarMetaDataParser;
+import org.jboss.metadata.ejb.spec.AbstractEnterpriseBeanMetaData;
 import org.jboss.metadata.ejb.spec.EjbJarMetaData;
+import org.jboss.metadata.ejb.spec.EjbType;
 import org.jboss.metadata.parser.util.MetaDataElementParser;
 import org.jboss.vfs.VirtualFile;
 
@@ -157,6 +160,26 @@ public class EjbJarParsingDeploymentUnitProcessor implements DeploymentUnitProce
             //EJB spec 20.5.1, we do not process annotations for older deployments
             MetadataCompleteMarker.setMetadataComplete(deploymentUnit, true);
         }
+
+        if(ejbJarMetaData.getEnterpriseBeans() != null) {
+            //check for entity beans
+            StringBuilder beans = new StringBuilder();
+            boolean error = false;
+            for (AbstractEnterpriseBeanMetaData bean : ejbJarMetaData.getEnterpriseBeans()) {
+                if (bean.getEjbType() == EjbType.ENTITY) {
+                    if (!error) {
+                        error = true;
+                    } else {
+                        beans.append(", ");
+                    }
+                    beans.append(bean.getEjbName());
+                }
+            }
+            if (error) {
+                throw EjbLogger.ROOT_LOGGER.entityBeansAreNotSupported(beans.toString());
+            }
+        }
+
     }
 
     /**
@@ -292,8 +315,7 @@ public class EjbJarParsingDeploymentUnitProcessor implements DeploymentUnitProce
 
     static Map<String, AbstractMetaDataParser<?>> createJbossEjbJarParsers() {
         Map<String, AbstractMetaDataParser<?>> parsers = new HashMap<String, AbstractMetaDataParser<?>>();
-        parsers.put(EJBBoundClusteringMetaDataParser.NAMESPACE_URI_1_0, new EJBBoundClusteringMetaDataParser());
-        parsers.put(EJBBoundClusteringMetaDataParser11.NAMESPACE_URI_1_1, EJBBoundClusteringMetaDataParser11.INSTANCE);
+        EnumSet.allOf(ClusteringSchema.class).forEach(schema -> parsers.put(schema.getNamespaceUri(), new EJBBoundClusteringMetaDataParser(schema)));
         parsers.put(EJBBoundSecurityMetaDataParser.LEGACY_NAMESPACE_URI, EJBBoundSecurityMetaDataParser.INSTANCE);
         parsers.put(EJBBoundSecurityMetaDataParser.NAMESPACE_URI_1_0, EJBBoundSecurityMetaDataParser.INSTANCE);
         parsers.put(EJBBoundSecurityMetaDataParser11.NAMESPACE_URI_1_1, EJBBoundSecurityMetaDataParser11.INSTANCE);

@@ -22,6 +22,7 @@
 
 package org.wildfly.clustering.ee.infinispan;
 
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.infinispan.Cache;
@@ -38,6 +39,10 @@ public class CacheEntryMutator<K, V> implements Mutator {
     private final V value;
     private final AtomicBoolean mutated;
 
+    public CacheEntryMutator(Cache<K, V> cache, Map.Entry<K, V> entry) {
+        this(cache, entry.getKey(), entry.getValue());
+    }
+
     public CacheEntryMutator(Cache<K, V> cache, K id, V value) {
         this.cache = cache;
         this.id = id;
@@ -49,7 +54,8 @@ public class CacheEntryMutator<K, V> implements Mutator {
     public void mutate() {
         // We only ever have to perform a replace once within a batch
         if ((this.mutated == null) || this.mutated.compareAndSet(false, true)) {
-            this.cache.getAdvancedCache().withFlags(Flag.IGNORE_RETURN_VALUES).replace(this.id, this.value);
+            // Use FAIL_SILENTLY to prevent mutation from failing locally due to remote exceptions
+            this.cache.getAdvancedCache().withFlags(Flag.IGNORE_RETURN_VALUES, Flag.FAIL_SILENTLY).put(this.id, this.value);
         }
     }
 }

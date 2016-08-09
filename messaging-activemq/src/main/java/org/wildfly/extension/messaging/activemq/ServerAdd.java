@@ -58,6 +58,7 @@ import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_FILE_SIZE;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_MAX_IO;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_MIN_FILES;
+import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_POOL_FILES;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_SYNC_NON_TRANSACTIONAL;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_SYNC_TRANSACTIONAL;
 import static org.wildfly.extension.messaging.activemq.ServerDefinition.JOURNAL_TYPE;
@@ -166,22 +167,20 @@ class ServerAdd extends AbstractAddStepHandler {
     protected void populateModel(OperationContext context, ModelNode operation, Resource resource) throws OperationFailedException {
         super.populateModel(context, operation, resource);
 
-        if (context.isNormalServer()) {
-            // add an operation to create all the messaging paths resources that have not been already been created
-            // prior to adding the ActiveMQ server
-            context.addStep(new OperationStepHandler() {
-                @Override
-                public void execute(OperationContext context, ModelNode operation) throws OperationFailedException {
-                    final ModelNode model = Resource.Tools.readModel(resource);
-                    for (String path : PathDefinition.PATHS.keySet()) {
-                        if (!model.get(ModelDescriptionConstants.PATH).hasDefined(path)) {
-                            PathAddress pathAddress = PathAddress.pathAddress(PathElement.pathElement(ModelDescriptionConstants.PATH, path));
-                            context.createResource(pathAddress);
-                        }
+        // add an operation to create all the messaging paths resources that have not been already been created
+        // prior to adding the ActiveMQ server
+        context.addStep(new OperationStepHandler() {
+            @Override
+            public void execute(OperationContext context, ModelNode operation) throws OperationFailedException {
+                final ModelNode model = Resource.Tools.readModel(resource);
+                for (String path : PathDefinition.PATHS.keySet()) {
+                    if (!model.get(ModelDescriptionConstants.PATH).hasDefined(path)) {
+                        PathAddress pathAddress = PathAddress.pathAddress(PathElement.pathElement(ModelDescriptionConstants.PATH, path));
+                        context.createResource(pathAddress);
                     }
                 }
-            }, OperationContext.Stage.MODEL);
-        }
+            }
+        }, OperationContext.Stage.MODEL);
     }
 
     @Override
@@ -364,6 +363,7 @@ class ServerAdd extends AbstractAddStepHandler {
         configuration.setJournalCompactPercentage(JOURNAL_COMPACT_PERCENTAGE.resolveModelAttribute(context, model).asInt());
         configuration.setJournalFileSize(JOURNAL_FILE_SIZE.resolveModelAttribute(context, model).asInt());
         configuration.setJournalMinFiles(JOURNAL_MIN_FILES.resolveModelAttribute(context, model).asInt());
+        configuration.setJournalPoolFiles(JOURNAL_POOL_FILES.resolveModelAttribute(context, model).asInt());
         configuration.setJournalSyncNonTransactional(JOURNAL_SYNC_NON_TRANSACTIONAL.resolveModelAttribute(context, model).asBoolean());
         configuration.setJournalSyncTransactional(JOURNAL_SYNC_TRANSACTIONAL.resolveModelAttribute(context, model).asBoolean());
         configuration.setLogJournalWriteRate(LOG_JOURNAL_WRITE_RATE.resolveModelAttribute(context, model).asBoolean());
@@ -447,7 +447,7 @@ class ServerAdd extends AbstractAddStepHandler {
             String className = classModel.get(NAME).asString();
             String moduleName = classModel.get(MODULE).asString();
             try {
-                ModuleIdentifier moduleID = ModuleIdentifier.create(moduleName);
+                ModuleIdentifier moduleID = ModuleIdentifier.fromString(moduleName);
                 Module module = Module.getCallerModuleLoader().loadModule(moduleID);
                 Class<?> clazz = module.getClassLoader().loadClass(className);
                 classes.add(clazz);
@@ -482,7 +482,7 @@ class ServerAdd extends AbstractAddStepHandler {
         for (Class clazz : unwrapClasses(interceptors)) {
             try {
                 Interceptor interceptor = Interceptor.class.cast(clazz.newInstance());
-                serverService.getIncomingInterceptors().add(interceptor);
+                serverService.getOutgoingInterceptors().add(interceptor);
             } catch (Exception e) {
                 throw new OperationFailedException(e);
             }

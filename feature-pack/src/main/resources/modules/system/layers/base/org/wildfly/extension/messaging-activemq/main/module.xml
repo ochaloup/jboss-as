@@ -39,6 +39,7 @@
         <module name="javax.api"/>
         <module name="javax.enterprise.api"/>
         <module name="javax.jms.api"/>
+        <module name="javax.resource.api" />
         <module name="javax.transaction.api"/>
         <module name="org.apache.activemq.artemis"/>
         <module name="org.apache.activemq.artemis.ra"/>
@@ -66,6 +67,7 @@
         <module name="org.jboss.as.connector" />
         <module name="org.jboss.as.security"/>
         <module name="org.jboss.vfs"/>
+        <module name="org.jboss.jts"/>
         <module name="org.picketbox"/>
         <module name="org.jboss.jboss-transaction-spi"/>
         <module name="org.jboss.remote-naming"/>

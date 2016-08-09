@@ -43,6 +43,9 @@ import javax.jms.Message;
 import javax.jms.Queue;
 import javax.jms.Topic;
 import javax.naming.InitialContext;
+import java.util.PropertyPermission;
+
+import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 
 /**
  * Tests EJB2.0 MDBs listening on a topic.
@@ -63,7 +66,7 @@ public class MDB20TopicTestCase extends AbstractMDB2xTestCase {
 
         @Override
         public void setup(ManagementClient managementClient, String containerId) throws Exception {
-            jmsAdminOperations = JMSOperationsProvider.getInstance(managementClient);
+            jmsAdminOperations = JMSOperationsProvider.getInstance(managementClient.getControllerClient());
             jmsAdminOperations.createJmsTopic("ejb2x/topic", "java:jboss/ejb2x/topic");
             jmsAdminOperations.createJmsQueue("ejb2x/replyQueueA", "java:jboss/ejb2x/replyQueueA");
             jmsAdminOperations.createJmsQueue("ejb2x/replyQueueB", "java:jboss/ejb2x/replyQueueB");
@@ -89,6 +92,7 @@ public class MDB20TopicTestCase extends AbstractMDB2xTestCase {
         ejbJar.addAsManifestResource(MDB20TopicTestCase.class.getPackage(), "ejb-jar-20-topic.xml", "ejb-jar.xml");
         ejbJar.addAsManifestResource(MDB20TopicTestCase.class.getPackage(), "jboss-ejb3-topic.xml", "jboss-ejb3.xml");
         ejbJar.addAsManifestResource(new StringAsset("Dependencies: org.jboss.as.controller-client, org.jboss.dmr \n"), "MANIFEST.MF");
+        ejbJar.addAsManifestResource(createPermissionsXmlAsset(new PropertyPermission("ts.timeout.factor", "read")), "jboss-permissions.xml");
         logger.info(ejbJar.toString(true));
         return ejbJar;
     }
