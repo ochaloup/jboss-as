@@ -42,7 +42,7 @@
         <jbossas.ts.integ.dir>${basedir}/..</jbossas.ts.integ.dir>
         <jbossas.ts.dir>${jbossas.ts.integ.dir}/..</jbossas.ts.dir>
         <jbossas.project.dir>${jbossas.ts.dir}/..</jbossas.project.dir>
-        <surefire.forked.process.timeout>5400</surefire.forked.process.timeout>
+        <surefire.forked.process.timeout>12000</surefire.forked.process.timeout>
         <test-group>org/jboss/as/test/clustering/cluster</test-group>
         <version.org.jboss.byteman>4.0.6</version.org.jboss.byteman>
         <version.org.infinispan.server>${version.org.infinispan}</version.org.infinispan.server>
