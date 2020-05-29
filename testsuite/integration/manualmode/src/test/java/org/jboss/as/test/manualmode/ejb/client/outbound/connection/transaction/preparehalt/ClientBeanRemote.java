@@ -27,4 +27,5 @@ import javax.ejb.Remote;
 @Remote
 public interface ClientBeanRemote {
     void twoPhaseCommitCrashAtClient(String remoteDeploymentName);
+    void twoPhaseIntermittentCommitFailureOnServer(String remoteDeploymentName);
 }

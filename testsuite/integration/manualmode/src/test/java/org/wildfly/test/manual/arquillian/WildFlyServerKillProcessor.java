@@ -20,12 +20,25 @@
  * 02110-1301 USA, or see the FSF site: http://www.fsf.org.
  */
 
-package org.jboss.as.test.manualmode.ejb.client.outbound.connection.transaction.preparehalt;
+package org.wildfly.test.manual.arquillian;
 
-import javax.ejb.Remote;
+import org.jboss.arquillian.container.spi.Container;
+import org.jboss.arquillian.container.spi.ServerKillProcessor;
 
-@Remote
-public interface TransactionalRemote {
-    void enlistOnePersistentXAResource();
-    void intermittentCommitFailure();
+/**
+ * <p>
+ * Provides a functionality for {@link Container#kill()} as WildFly managed container implementation
+ * simulates it with stop. But the stop call fails as the WildFly handler expects the container being started.
+ * </p>
+ * <p>
+ * As the kill call is used in some tests only for purpose announcing of crashed server to Arquillian
+ * (ie. the container was stopped by the test intentionally without use of the Arquillian)
+ * then this processor only receives the <code>kill</code> call and does nothing.
+ * Arquillian knows that container is stopped and the call does not fail.
+ * </p>
+ */
+public class WildFlyServerKillProcessor implements ServerKillProcessor {
+    public void kill(Container container) throws Exception {
+        // do nothing
+    }
 }

@@ -22,7 +22,6 @@
 
 package org.jboss.as.test.manualmode.ejb.client.outbound.connection.transaction.preparehalt;
 
-import com.arjuna.ats.arjuna.recovery.RecoveryDriver;
 import org.jboss.arquillian.container.test.api.ContainerController;
 import org.jboss.arquillian.container.test.api.Deployment;
 import org.jboss.arquillian.container.test.api.RunAsClient;
@@ -32,18 +31,13 @@ import org.jboss.arquillian.test.api.ArquillianResource;
 import org.jboss.as.arquillian.api.ContainerResource;
 import org.jboss.as.arquillian.api.ServerSetup;
 import org.jboss.as.arquillian.container.ManagementClient;
-import org.jboss.as.controller.client.helpers.ClientConstants;
-import org.jboss.as.controller.descriptions.ModelDescriptionConstants;
-import org.jboss.as.test.integration.management.ManagementOperations;
-import org.jboss.as.test.integration.management.util.MgmtOperationException;
+import org.jboss.as.test.integration.transactions.RecoveryExecutor;
 import org.jboss.as.test.integration.transactions.RemoteLookups;
 import org.jboss.as.test.integration.transactions.TestXAResource;
 import org.jboss.as.test.integration.transactions.TransactionCheckerSingleton;
 import org.jboss.as.test.integration.transactions.TransactionCheckerSingletonRemote;
 import org.jboss.as.test.manualmode.ejb.client.outbound.connection.EchoOnServerOne;
 import org.jboss.as.test.shared.CLIServerSetupTask;
-import org.jboss.as.test.shared.TimeoutUtil;
-import org.jboss.dmr.ModelNode;
 import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
@@ -56,13 +50,12 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 
 import javax.naming.NamingException;
-import java.io.IOException;
 import java.net.URISyntaxException;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.Arrays;
 import java.util.PropertyPermission;
 
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP;
-import static org.jboss.as.controller.descriptions.ModelDescriptionConstants.OP_ADDR;
 import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createFilePermission;
 import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 
@@ -83,14 +76,8 @@ public class TransactionPropagationPrepareHaltTestCase {
     private static final String CLIENT_DEPLOYMENT = "txn-prepare-halt-client";
     private static final String SERVER_DEPLOYMENT = "txn-prepare-halt-server";
 
-    private static final ModelNode ADDRESS_TRANSACTIONS
-            = new ModelNode().add("subsystem", "transactions");
-    private static final ModelNode ADDRESS_SOCKET_BINDING
-            = new ModelNode().add(ClientConstants.SOCKET_BINDING_GROUP, "standard-sockets");
-    static {
-        ADDRESS_TRANSACTIONS.protect();
-        ADDRESS_SOCKET_BINDING.protect();
-    }
+    private static final String CLIENT_SERVER_JBOSS_HOME = "jbossas-with-remote-outbound-connection";
+    private static final String WFTC_DATA_DIRECTORY_NAME = "ejb-xa-recovery";
 
     @Deployment(name = CLIENT_DEPLOYMENT, testable = false)
     @TargetsContainer(CLIENT_SERVER_NAME)
@@ -100,7 +87,11 @@ public class TransactionPropagationPrepareHaltTestCase {
             .addPackage(TestXAResource.class.getPackage())
             .addAsManifestResource(EchoOnServerOne.class.getPackage(), "jboss-ejb-client.xml", "jboss-ejb-client.xml")
             .addAsManifestResource(createPermissionsXmlAsset(
-                new RuntimePermission("exitVM", "none")
+                new RuntimePermission("exitVM", "none"),
+                createFilePermission("read,write", "basedir",
+                    Arrays.asList("target", CLIENT_SERVER_JBOSS_HOME, "standalone", "data", WFTC_DATA_DIRECTORY_NAME)),
+                createFilePermission("read,write", "basedir",
+                    Arrays.asList("target", CLIENT_SERVER_JBOSS_HOME, "standalone", "data", WFTC_DATA_DIRECTORY_NAME, "-"))
                 ), "permissions.xml")
             .addAsManifestResource(new StringAsset("Dependencies: org.jboss.jts\n"), "MANIFEST.MF");
         return jar;
@@ -110,7 +101,7 @@ public class TransactionPropagationPrepareHaltTestCase {
     @TargetsContainer(SERVER_SERVER_NAME)
     public static Archive<?> deployment() {
         final JavaArchive jar = ShrinkWrap.create(JavaArchive.class, SERVER_DEPLOYMENT + ".jar")
-            .addClasses(TransactionalBean.class, TransactionalRemote.class)
+            .addClasses(TransactionalBean.class, TransactionalRemote.class, TestCommitFailureXAResource.class)
             .addPackages(true, TestXAResource.class.getPackage())
             .addAsManifestResource(createPermissionsXmlAsset(
                 new PropertyPermission("jboss.server.data.dir", "read"),
@@ -184,49 +175,62 @@ public class TransactionPropagationPrepareHaltTestCase {
             log.debugf(expected,"Exception expected as the client server '%s' should be crashed", CLIENT_SERVER_NAME);
         }
 
-        try {
-            container.kill(CLIENT_SERVER_NAME);
-        } catch (Exception expected) {
-            // container was JVM crashed by the test, this call let the arquillian know that the container is not running
-            log.debugf(expected,"Server %s can't be killed as the server was halt by test already", CLIENT_SERVER_NAME);
-        }
+        // container was JVM crashed by the test, this call let the arquillian know that the container is not running
+        container.kill(CLIENT_SERVER_NAME);
+        // starting the container (as it was JVM crashed) for running transaction recovery
         container.start(CLIENT_SERVER_NAME);
 
-        String transactionSocketBinding = readAttribute(managementClientClient, ADDRESS_TRANSACTIONS,"socket-binding").asString();
-        ModelNode addressSocketBinding = ADDRESS_SOCKET_BINDING.clone();
-        addressSocketBinding.add(ClientConstants.SOCKET_BINDING, transactionSocketBinding);
-        String host = readAttribute(managementClientClient, addressSocketBinding, "bound-address").asString();
-        int port = readAttribute(managementClientClient, addressSocketBinding, "bound-port").asInt();
+        RecoveryExecutor recoveryExecutor = new RecoveryExecutor(managementClientClient);
 
-        TransactionCheckerSingletonRemote checker = RemoteLookups.lookupEjbStateless(managementClientServer, SERVER_DEPLOYMENT,
-                TransactionCheckerSingleton.class, TransactionCheckerSingletonRemote.class);
-        Assert.assertEquals("Expecting the transaction was interrrupted and no rollback was called yet",
-                0, checker.getRolledback());
+        TransactionCheckerSingletonRemote serverSingletonChecker = RemoteLookups.lookupEjbStateless(managementClientServer,
+                SERVER_DEPLOYMENT, TransactionCheckerSingleton.class, TransactionCheckerSingletonRemote.class);
+        Assert.assertEquals("Expecting the transaction was interrupted and no rollback was called yet",
+                0, serverSingletonChecker.getRolledback());
 
-        log.debugf("Transaction recovery will be run for application server at %s:%s", host, port);
-        Assert.assertTrue("Expecting recovery #1 being run without any issue", runTransactionRecovery(host, port));
-        Assert.assertTrue("Expecting recovery #2 being run without any issue", runTransactionRecovery(host, port));
+        Assert.assertTrue("Expecting recovery #1 being run without any issue", recoveryExecutor.runTransactionRecovery());
+        Assert.assertTrue("Expecting recovery #2 being run without any issue", recoveryExecutor.runTransactionRecovery());
 
         Assert.assertEquals("Expecting the rollback to be called on the server during recovery",
-             1, checker.getRolledback());
+             1, serverSingletonChecker.getRolledback());
+        assertEmptyClientWftcDataDirectory();
     }
 
-    private boolean runTransactionRecovery(String host, int port) {
-        RecoveryDriver recoveryDriver = new RecoveryDriver(port, host);
-        try {
-            return recoveryDriver.synchronousVerboseScan(TimeoutUtil.adjust(60 * 1000), 5);
-        } catch (Exception e) {
-            throw new IllegalStateException("Cannot run transaction recovery synchronous scan for " + host + ":" + port, e);
-        }
+    /**
+     * <p>Reproducer for issue JBEAP-19435</p>
+     */
+    @Test
+    public void recoveryCommitRetryOnFailure() throws Exception {
+        ClientBeanRemote bean = RemoteLookups.lookupEjbStateless(managementClientClient, CLIENT_DEPLOYMENT,
+                ClientBean.class, ClientBeanRemote.class);
+        bean.twoPhaseIntermittentCommitFailureOnServer(SERVER_DEPLOYMENT);
+
+        RecoveryExecutor recoveryExecutor = new RecoveryExecutor(managementClientClient);
+        TransactionCheckerSingletonRemote serverSingletonChecker = RemoteLookups.lookupEjbStateless(managementClientServer,
+                SERVER_DEPLOYMENT, TransactionCheckerSingleton.class, TransactionCheckerSingletonRemote.class);
+
+        Assert.assertEquals("Expecting the transaction was interrupted and no commit was called on the server yet",
+                0, serverSingletonChecker.getCommitted());
+
+        // the second call of the recovery execution is needed to manage the race condition
+        // if the recovery scan is already in progress started by periodic transaction recovery
+        // the test needs to ensure that recovery cycle was finished as whole but we need to check the state
+        // after the first recovery cycle the test checks that the WFTC data is deleted immediately after the transaction is committed.
+        Assert.assertTrue("Expecting recovery being run without any issue", recoveryExecutor.runTransactionRecovery());
+        /*if(serverSingletonChecker.getCommitted() == 0) {
+            Assert.assertTrue("Expecting recovery #2 being run without any issue", recoveryExecutor.runTransactionRecovery());
+        }*/
+
+        Assert.assertEquals("Expecting the commit to be called on the server during recovery",
+                1, serverSingletonChecker.getCommitted());
+        assertEmptyClientWftcDataDirectory();
     }
 
-    private ModelNode readAttribute(final ManagementClient managementClient, ModelNode address, String name) throws IOException, MgmtOperationException {
-        ModelNode operation = new ModelNode();
-        operation.get(OP_ADDR).set(address);
-        operation.get(OP).set(ClientConstants.READ_ATTRIBUTE_OPERATION);
-        operation.get(ModelDescriptionConstants.INCLUDE_DEFAULTS).set("true");
-        operation.get(ModelDescriptionConstants.RESOLVE_EXPRESSIONS).set("true");
-        operation.get(ClientConstants.NAME).set(name);
-        return ManagementOperations.executeOperation(managementClient.getControllerClient(), operation);
+    private void assertEmptyClientWftcDataDirectory() {
+        Path wftcDataDirectory = Paths.get("target", CLIENT_SERVER_JBOSS_HOME, "standalone", "data", WFTC_DATA_DIRECTORY_NAME);
+        Assert.assertTrue("Expecting existence of WFTC data directory at " + wftcDataDirectory,
+                wftcDataDirectory.toFile().isDirectory());
+        String[] wftcFiles = wftcDataDirectory.toFile().list();
+        Assert.assertEquals("WFTC data directory at " + wftcDataDirectory
+                + " is not empty but it should be. There are files: " + Arrays.asList(wftcFiles), 0, wftcFiles.length);
     }
 }

@@ -52,7 +52,18 @@ public class ClientBean implements ClientBeanRemote {
             // matches the order during 2PC processing
             tm.getTransaction().enlistResource(new TestXAResource(TestXAResource.TestAction.PREPARE_CRASH_VM));
         } catch (SystemException | RollbackException e) {
-            throw new RuntimeException("Cannot enlist TestXAResource to the current transaction", e);
+            throw new RuntimeException("Cannot enlist " + TestXAResource.class.getSimpleName() + " to the current transaction", e);
+        }
+    }
+
+    public void twoPhaseIntermittentCommitFailureOnServer(String remoteDeploymentName) {
+        TransactionalRemote bean = getRemote(remoteDeploymentName);
+        bean.intermittentCommitFailure();
+        try {
+            // Enlisting second resource to force 2PC being processed
+            tm.getTransaction().enlistResource(new TestXAResource());
+        } catch (SystemException | RollbackException e) {
+            throw new RuntimeException("Cannot enlist " + TestXAResource.class.getSimpleName() + " to the current transaction", e);
         }
     }
 

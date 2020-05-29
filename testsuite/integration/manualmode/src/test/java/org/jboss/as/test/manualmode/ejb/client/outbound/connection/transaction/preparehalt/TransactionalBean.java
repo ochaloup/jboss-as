@@ -54,8 +54,19 @@ public class TransactionalBean implements TransactionalRemote {
             log.debugf("Invocation to #enlistOnePersistentXAResource with transaction", tm.getTransaction());
             tm.getTransaction().enlistResource(new PersistentTestXAResource(transactionCheckerSingleton));
         } catch (Exception e) {
-            throw new IllegalStateException("Cannot enlist single PersistentTestXAResource to transaction", e);
+            throw new IllegalStateException("Cannot enlist single " + PersistentTestXAResource.class.getSimpleName()
+                    + " to transaction", e);
         }
     }
 
+    @TransactionAttribute(TransactionAttributeType.MANDATORY)
+    public void intermittentCommitFailure() {
+        try {
+            log.debugf("Invocation to #intermittentCommitFailure with transaction", tm.getTransaction());
+            tm.getTransaction().enlistResource(new TestCommitFailureXAResource(transactionCheckerSingleton));
+        } catch (Exception e) {
+            throw new IllegalStateException("Cannot enlist single " + TestCommitFailureXAResource.class.getSimpleName()
+                    + " to transaction", e);
+        }
+    }
 }
