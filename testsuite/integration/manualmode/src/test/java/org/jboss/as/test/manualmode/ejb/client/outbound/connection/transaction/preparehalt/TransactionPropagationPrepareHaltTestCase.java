@@ -49,7 +49,9 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import javax.ejb.EJBException;
 import javax.naming.NamingException;
+import javax.transaction.HeuristicMixedException;
 import java.net.URISyntaxException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -196,19 +198,32 @@ public class TransactionPropagationPrepareHaltTestCase {
     }
 
     /**
-     * <p>Reproducer for issue JBEAP-19435</p>
+     * <p>Reproducer for JBEAP-19435</p>
+     * <p>
+     * Test scenario:
+     *   <ol>
+     *     <li>client WildFly starts the transactions and calls remote EJB bean at server WildFly,
+     *         there are two resources enlisted on the client side and one resource is enlisted on the other server</li>
+     *     <li>{@link ClientBean} method finishes and transaction manager starts 2PC</li>
+     *     <li>client WildFly asks the server WildFly to <code>prepare</code> and <code>commit</code></li>
+     *     <li>server WildFly prepares but the <code>commit</code> of XAResource fails with intermittent failure on the server</li>
+     *     <li>client WildFly runs transaction recovery and expects the unfinished commit is finished with success
+     *         and just after the commit is processed the WFTC registry is empty</li>
+     *   </ol>
+     * </p>
      */
     @Test
     public void recoveryCommitRetryOnFailure() throws Exception {
         ClientBeanRemote bean = RemoteLookups.lookupEjbStateless(managementClientClient, CLIENT_DEPLOYMENT,
                 ClientBean.class, ClientBeanRemote.class);
+        // ClientBean#twoPhaseIntermittentCommitFailureOnServer -> TransactionalBean#intermittentCommitFailure
         bean.twoPhaseIntermittentCommitFailureOnServer(SERVER_DEPLOYMENT);
 
         RecoveryExecutor recoveryExecutor = new RecoveryExecutor(managementClientClient);
         TransactionCheckerSingletonRemote serverSingletonChecker = RemoteLookups.lookupEjbStateless(managementClientServer,
                 SERVER_DEPLOYMENT, TransactionCheckerSingleton.class, TransactionCheckerSingletonRemote.class);
 
-        Assert.assertEquals("Expecting the transaction was interrupted and no commit was called on the server yet",
+        Assert.assertEquals("Expecting the transaction was interrupted and commit was called on resources at the server yet",
                 0, serverSingletonChecker.getCommitted());
 
         // the second call of the recovery execution is needed to manage the race condition
@@ -216,12 +231,72 @@ public class TransactionPropagationPrepareHaltTestCase {
         // the test needs to ensure that recovery cycle was finished as whole but we need to check the state
         // after the first recovery cycle the test checks that the WFTC data is deleted immediately after the transaction is committed.
         Assert.assertTrue("Expecting recovery being run without any issue", recoveryExecutor.runTransactionRecovery());
-        /*if(serverSingletonChecker.getCommitted() == 0) {
+        if(serverSingletonChecker.getCommitted() == 0) {
             Assert.assertTrue("Expecting recovery #2 being run without any issue", recoveryExecutor.runTransactionRecovery());
-        }*/
+        }
 
         Assert.assertEquals("Expecting the commit to be called on the server during recovery",
                 1, serverSingletonChecker.getCommitted());
+        assertEmptyClientWftcDataDirectory();
+    }
+
+    /**
+     * <p>
+     * Test scenario:
+     *   <ol>
+     *     <li>client WildFly starts the transactions and calls remote EJB bean at server WildFly,
+     *         there is one resource enlisted on the client side but two resources are enlisted on the other server</li>
+     *     <li>{@link ClientBean} method finishes and transaction manager starts 1PC as only one resource was enslited
+     *         on the client side which is the owner of the transaction</li>
+     *     <li>client WildFly asks the server WildFly to <code>commit</code> as 1PC is used</li>
+     *     <li>server WildFly <code>commit</code> of XAResource fails with intermittent failure on the server
+     *         which for 1PC emits the heuristic exceptions, as an exception which requires manual fixing</li>
+     *     <li>the test pretend an administrator to call ':recover' JBoss CLI call on transaction participants
+     *         and the transaction is moved from 'heuristic' state to 'prepared' state</li>
+     *     <li>the transaction recovery should be able to fix the transaction in the 'prepared' state state and commit it</li>
+     *   </ol>
+     * </p>
+     */
+    @Test
+    public void recoveryOnePhaseCommitRetryOnFailure() throws Exception {
+        ClientBeanRemote bean = RemoteLookups.lookupEjbStateless(managementClientClient, CLIENT_DEPLOYMENT,
+                ClientBean.class, ClientBeanRemote.class);
+        try {
+            // ClientBean#onePhaseIntermittentCommitFailureOnServer -> TransactionalBean#intermittentCommitFailureTwoPhase
+            bean.onePhaseIntermittentCommitFailureOnServer(SERVER_DEPLOYMENT);
+        } catch (EJBException ejbe) {
+            if (!(ejbe.getCausedByException() instanceof HeuristicMixedException)) {
+                log.errorf(ejbe,"Wrong exception type was obtained on 1PC remote EJB call. Expected %s to be caught..",
+                        HeuristicMixedException.class.getName());
+                Assert.fail("Expecting the remote 1PC EJB call fails with HeuristicMixedException but it did not happen" +
+                        " and the " + ejbe + " was caught instead.");
+            }
+        }
+
+        RecoveryExecutor recoveryExecutor = new RecoveryExecutor(managementClientClient);
+        TransactionCheckerSingletonRemote serverSingletonChecker = RemoteLookups.lookupEjbStateless(managementClientServer,
+                SERVER_DEPLOYMENT, TransactionCheckerSingleton.class, TransactionCheckerSingletonRemote.class);
+
+        Assert.assertEquals("Expecting the transaction was interrupted on one resource but the second " +
+                        "should be still committed at the server", 1, serverSingletonChecker.getCommitted());
+
+        //  running recovery on heuristic transaction should not recover it
+        Assert.assertTrue("Expecting recovery being run without any issue", recoveryExecutor.runTransactionRecovery());
+        Assert.assertEquals("Expecting no other resource to be committed when recovery is run as the transaction" +
+                        " finished with heuristics and manual intervention is needed", 1, serverSingletonChecker.getCommitted());
+
+        // running WFLY :recover operation on all participants of the transactions in the Narayana object store
+        recoveryExecutor.cliRecoverAllTransactions();
+        // after :recover is executed the heuristic state is changed to 'prepared'. The recovery should commit it later
+        Assert.assertTrue("Expecting the recovery after cli :recover operation to be run without any issue",
+                recoveryExecutor.runTransactionRecovery());
+        if(serverSingletonChecker.getCommitted() == 1) { // ensuring one whole recovery cycle to be executed before the final check
+            Assert.assertTrue("Expecting the #2 recovery after cli :recover operation to be run without any issue",
+                    recoveryExecutor.runTransactionRecovery());
+        }
+
+        Assert.assertEquals("Expecting both resources on the server were committed",
+                2, serverSingletonChecker.getCommitted());
         assertEmptyClientWftcDataDirectory();
     }
 

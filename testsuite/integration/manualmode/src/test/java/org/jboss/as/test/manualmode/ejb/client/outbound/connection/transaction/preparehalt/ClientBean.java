@@ -67,6 +67,14 @@ public class ClientBean implements ClientBeanRemote {
         }
     }
 
+
+    public void onePhaseIntermittentCommitFailureOnServer(String remoteDeploymentName) {
+        TransactionalRemote bean = getRemote(remoteDeploymentName);
+        // Enlisting only remote EJB bean by the remote call and no other resource to process with 1PC
+        // but the remote EJB works with two resources and on 1PC commit it triggers the 2PC
+        bean.intermittentCommitFailureTwoPhase();
+    }
+
     private TransactionalRemote getRemote(String remoteDeployment) {
         String lookupBean = "ejb:/" + remoteDeployment + "/"
                 + "" + "/" + "TransactionalBean" + "!" + TransactionalRemote.class.getName();
