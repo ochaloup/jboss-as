@@ -205,8 +205,12 @@ public class SecurityAuditingTestCase extends AnnSBTest {
 
         BufferedReader reader = Files.newBufferedReader(auditLog.toPath(), StandardCharsets.UTF_8);
 
-        while (reader.readLine() != null) {
+        log.infof(">>>>: Reading lines from %s", auditLog.toPath());
+        String line = reader.readLine();
+        while (line != null) {
             // we need to get trough all old records (if any)
+            log.infof(">>>>: %s", line);
+            line = reader.readLine();
         }
 
         Utils.makeCall(url.toString(), "anil", "anil", 200);
@@ -221,6 +225,7 @@ public class SecurityAuditingTestCase extends AnnSBTest {
         // we'll be actively waiting for a given INTERVAL for the record to appear
         final long INTERVAL = TimeoutUtil.adjust(5000);
         long startTime = System.currentTimeMillis();
+        log.infof("<<<<: starting to work with checkAuditLog at time %d", startTime);
         String line;
         search_for_log:
         while (true) {
@@ -232,6 +237,10 @@ public class SecurityAuditingTestCase extends AnnSBTest {
             }
             // record not written to log yet -> continue checking if the time has not yet expired
             if (System.currentTimeMillis() > startTime + INTERVAL) {
+                log.infof("<<<<: failing at checkAuditLog at time %d", System.currentTimeMillis());
+                while (null != (line = reader.readLine())) {
+                    log.infof("<<<<: %s", line);
+                }
                 // time expired
                 throw new AssertionError("Login record has not been written into audit log! (time expired). Checked regex="
                         + regex);
