@@ -3,6 +3,7 @@ package org.wildfly.test.integration.microprofile.opentracing;
 import static org.jboss.as.test.shared.integration.ejb.security.PermissionUtils.createPermissionsXmlAsset;
 
 import io.opentracing.Scope;
+import io.opentracing.Span;
 import io.opentracing.Tracer;
 import io.opentracing.contrib.tracerresolver.TracerFactory;
 import io.opentracing.mock.MockSpan;
@@ -15,6 +16,7 @@ import org.wildfly.test.integration.microprofile.opentracing.application.MockTra
 import org.wildfly.test.integration.microprofile.opentracing.application.OpenTracingApplication;
 import org.wildfly.test.integration.microprofile.opentracing.application.TracedEndpoint;
 import org.jboss.as.test.shared.TestSuiteEnvironment;
+import org.jboss.as.ejb3.remote.tracing.TracingHelper;
 import org.jboss.shrinkwrap.api.Archive;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.EmptyAsset;
@@ -75,7 +77,8 @@ public class SimpleRestClientTestCase {
 
         // test
         // the first span
-        try (Scope ignored = tracer.buildSpan("existing-span").startActive(true)) {
+        Span s = tracer.buildSpan("existing-span").start();
+        try (Scope ignored = TracingHelper.activateSpan(s)) {
 
             // the second span is the client request, as a child of `existing-span`
             Client restClient = ClientTracingRegistrar.configure(ClientBuilder.newBuilder()).build();
@@ -88,6 +91,8 @@ public class SimpleRestClientTestCase {
                 // just a sanity check
                 Assert.assertEquals(200, response.getStatus());
             }
+        } finally {
+            s.finish();
         }
 
         // verify

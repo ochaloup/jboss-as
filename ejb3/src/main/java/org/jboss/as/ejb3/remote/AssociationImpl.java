@@ -37,6 +37,7 @@ import org.jboss.as.ejb3.deployment.DeploymentRepositoryListener;
 import org.jboss.as.ejb3.deployment.EjbDeploymentInformation;
 import org.jboss.as.ejb3.deployment.ModuleDeployment;
 import org.jboss.as.ejb3.logging.EjbLogger;
+import org.jboss.as.ejb3.remote.tracing.TracingHelper;
 import org.jboss.as.network.ClientMapping;
 import org.jboss.as.security.remoting.RemoteConnection;
 import org.jboss.ejb.client.Affinity;
@@ -91,7 +92,6 @@ import io.opentracing.Scope;
 import io.opentracing.Span;
 import io.opentracing.SpanContext;
 import io.opentracing.propagation.Format;
-import io.opentracing.propagation.TextMapAdapter;
 import io.opentracing.util.GlobalTracer;
 
 /**
@@ -208,7 +208,7 @@ final class AssociationImpl implements Association, AutoCloseable {
             }
 
             Span s = wrapContextAroundNewSpan(retrieveContextFromAttachments(attachments));
-            try(Scope _s = GlobalTracer.get().activateSpan(s)) {
+            try(Scope _s = TracingHelper.activateSpan(s)) {
                 final Map<String, Object> contextDataHolder = new HashMap<>();
                 result = invokeMethod(componentView, invokedMethod, invocationRequest, requestContent, cancellationFlag, contextDataHolder);
                 attachments.putAll(contextDataHolder);
@@ -272,7 +272,7 @@ final class AssociationImpl implements Association, AutoCloseable {
                 stringAttachments.put(e.getKey(), (String) e.getValue());
             }
         }
-        return GlobalTracer.get().extract(Format.Builtin.TEXT_MAP, new TextMapAdapter(stringAttachments));
+        return GlobalTracer.get().extract(Format.Builtin.TEXT_MAP, TracingHelper.textMapAdaptor(stringAttachments));
     }
 
     private void updateAffinities(InvocationRequest invocationRequest, Map<String, Object> attachments, EJBLocator<?> ejbLocator, ComponentView componentView) {

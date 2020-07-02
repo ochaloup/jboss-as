@@ -288,7 +288,7 @@
         <version.io.agroal>1.3</version.io.agroal>
         <version.io.jaegertracing>0.34.3</version.io.jaegertracing>
         <version.io.netty>4.1.48.Final</version.io.netty>
-        <version.io.opentracing>0.32.0</version.io.opentracing> <!-- 0.32 is needed as integrated to REST Easy where Tracer.buildSpan(...).startActive() is used, while 0.33.0 removed it -->
+        <version.io.opentracing>0.31.0</version.io.opentracing>
         <version.io.opentracing.concurrent>0.2.1</version.io.opentracing.concurrent>
         <version.io.opentracing.interceptors>0.0.4</version.io.opentracing.interceptors>
         <version.io.opentracing.jaxrs2>0.4.1</version.io.opentracing.jaxrs2>
