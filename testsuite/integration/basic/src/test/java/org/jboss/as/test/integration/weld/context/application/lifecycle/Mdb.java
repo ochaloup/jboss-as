@@ -38,7 +38,7 @@ import javax.jms.TextMessage;
 @JMSDestinationDefinition(
         name = Mdb.JNDI_NAME,
         interfaceName = "javax.jms.Queue",
-        destinationName = "jmsQueue"
+        destinationName = "jmsQueueAppLifeCycle"
 )
 @MessageDriven(activationConfig = {
         @ActivationConfigProperty(propertyName = "destinationLookup", propertyValue = Mdb.JNDI_NAME),
@@ -49,7 +49,7 @@ public class Mdb implements MessageListener {
 
     private static final Logger LOGGER = Logger.getLogger(Mdb.class);
 
-    public static final String JNDI_NAME = "java:app/mdb";
+    public static final String JNDI_NAME = "java:app/mdbapplifecycle";
 
     public void onMessage(Message message) {
         try {

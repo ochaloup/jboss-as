@@ -33,6 +33,7 @@ import javax.enterprise.context.Destroyed;
 import javax.enterprise.context.Initialized;
 import javax.enterprise.context.control.RequestContextController;
 import javax.enterprise.event.Observes;
+import javax.enterprise.inject.Produces;
 import javax.inject.Inject;
 import javax.jms.JMSContext;
 import javax.jms.Queue;
@@ -46,19 +47,19 @@ public class Bean {
 
     private static final Logger LOGGER = Logger.getLogger(Bean.class.getName());
 
-    @Resource
+    @Produces @Resource
     private ManagedExecutorService executorService;
 
     @Inject
     private JMSContext jmsContext;
 
-    @Resource(lookup = Mdb.JNDI_NAME)
+    @Produces @Resource(lookup = Mdb.JNDI_NAME)
     private Queue jmsQueue;
 
     @Inject
     private RequestContextController requestContextController;
 
-    @EJB(lookup = "java:global/TEST_RESULTS/TestResultsBean!org.jboss.as.test.integration.weld.context.application.lifecycle.TestResults")
+    @Produces @EJB(lookup = "java:global/TEST_RESULTS/TestResultsBean!org.jboss.as.test.integration.weld.context.application.lifecycle.TestResults")
     private TestResults testResults;
 
     public void onInitialized(@Observes @Initialized(ApplicationScoped.class) Object object) {
