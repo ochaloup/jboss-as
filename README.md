@@ -4,6 +4,16 @@
   </a>
 </p>
 
+Transaction recovery testing
+============================
+
+Compile
+
+```
+rm -rf dist/target && ./build.sh clean install -B  -fae -DallTests -DskipTests -Dcheckstyle.skip=true -pl transactions,component-matrix-builder,galleon-pack,galleon-pack/galleon-content,galleon-pack/galleon-feature-pack,ee-feature-pack/galleon-feature-pack,ee-feature-pack/galleon-feature-pack,dist -Dversion.org.jboss.narayana=5.11.3.Final-SNAPSHOT-recovery
+
+```
+
 WildFly Application Server
 ========================
 https://wildfly.org
