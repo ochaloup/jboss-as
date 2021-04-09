@@ -33,6 +33,8 @@ import java.util.TreeSet;
 
 import javax.transaction.TransactionSynchronizationRegistry;
 
+import com.arjuna.ats.internal.jta.recovery.arjunacore.RecoveryXids;
+import com.arjuna.ats.jta.common.jtaPropertyManager;
 import org.jboss.as.controller.AbstractWriteAttributeHandler;
 import org.jboss.as.controller.AttributeDefinition;
 import org.jboss.as.controller.ModelVersion;
@@ -120,6 +122,26 @@ public class TransactionSubsystemRootResourceDefinition extends SimpleResourceDe
             .setXmlName(Attribute.RECOVERY_LISTENER.getLocalName())
             .setAllowExpression(true).build();
 
+    public static final SimpleAttributeDefinition RECOVERY_PERIOD = new SimpleAttributeDefinitionBuilder(CommonAttributes.RECOVERY_PERIOD, ModelType.INT, true)
+            .setDefaultValue(new ModelNode().set(120)) // in seconds
+            .setValidator(new IntRangeValidator(0, false, true))
+            .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
+            .setXmlName(Attribute.RECOVERY_PERIOD.getLocalName())
+            .setAllowExpression(true).build();
+
+    public static final SimpleAttributeDefinition RECOVERY_BACKOFF_PERIOD = new SimpleAttributeDefinitionBuilder(CommonAttributes.RECOVERY_BACKOFF_PERIOD, ModelType.INT, true)
+            .setDefaultValue(new ModelNode().set(10)) // in seconds
+            .setValidator(new IntRangeValidator(0, false, true))
+            .setFlags(AttributeAccess.Flag.RESTART_ALL_SERVICES)
+            .setXmlName(Attribute.RECOVERY_BACKOFF_PERIOD.getLocalName())
+            .setAllowExpression(true).build();
+
+    public static final SimpleAttributeDefinition ALLOW_RECOVERY_SUSPENSION = new SimpleAttributeDefinitionBuilder(CommonAttributes.ALLOW_RECOVERY_SUSPENSION, ModelType.BOOLEAN, true)
+            .setDefaultValue(ModelNode.TRUE)
+            .setFlags(AttributeAccess.Flag.RESTART_NONE)
+            .setXmlName(Attribute.ALLOW_RECOVERY_SUSPENSION.getLocalName())
+            .setAllowExpression(true).build();
+
     //core environment
     public static final SimpleAttributeDefinition NODE_IDENTIFIER = new SimpleAttributeDefinitionBuilder(CommonAttributes.NODE_IDENTIFIER, ModelType.STRING, true)
             .setDefaultValue(new ModelNode().set("1"))
@@ -127,6 +149,13 @@ public class TransactionSubsystemRootResourceDefinition extends SimpleResourceDe
             .setAllowExpression(true)
             .setValidator(new StringBytesLengthValidator(0,23,true,true))
             .build();
+
+    public static final SimpleAttributeDefinition ORPHAN_SAFETY_INTERVAL = new SimpleAttributeDefinitionBuilder(CommonAttributes.ORPHAN_SAFETY_INTERVAL, ModelType.INT, true)
+            .setDefaultValue(new ModelNode().set(20000)) // in millis
+            .setValidator(new IntRangeValidator(0, false, true))
+            .setFlags(AttributeAccess.Flag.RESTART_NONE)
+            .setXmlName(Attribute.ORPHAN_SAFETY_INTERVAL.getLocalName())
+            .setAllowExpression(true).build();
 
     public static final SimpleAttributeDefinition PROCESS_ID_UUID = new SimpleAttributeDefinitionBuilder("process-id-uuid", ModelType.BOOLEAN, true)
             .setDefaultValue(ModelNode.FALSE)
@@ -180,6 +209,13 @@ public class TransactionSubsystemRootResourceDefinition extends SimpleResourceDe
             .setFlags(AttributeAccess.Flag.RESTART_NONE)
             .setXmlName(Attribute.DEFAULT_TIMEOUT.getLocalName())
             .setAllowExpression(true).build();
+
+    public static final SimpleAttributeDefinition TRANSACTIONS_ENABLED = new SimpleAttributeDefinitionBuilder(CommonAttributes.TRANSACTIONS_ENABLED, ModelType.BOOLEAN, true)
+            .setDefaultValue(new ModelNode().set(true))
+            .setFlags(AttributeAccess.Flag.RESTART_NONE)
+            .setXmlName(Attribute.TRANSACTIONS_ENABLED.getLocalName())
+            .setAllowExpression(true)
+            .build();
 
     public static final SimpleAttributeDefinition MAXIMUM_TIMEOUT = new SimpleAttributeDefinitionBuilder(CommonAttributes.MAXIMUM_TIMEOUT, ModelType.INT, true)
             .setValidator(new IntRangeValidator(300))
@@ -307,12 +343,13 @@ public class TransactionSubsystemRootResourceDefinition extends SimpleResourceDe
 
     // all attributes
     static final AttributeDefinition[] add_attributes = new AttributeDefinition[] {
-            BINDING, STATUS_BINDING, RECOVERY_LISTENER, NODE_IDENTIFIER, PROCESS_ID_UUID, PROCESS_ID_SOCKET_BINDING,
+            BINDING, STATUS_BINDING, RECOVERY_LISTENER, NODE_IDENTIFIER, TRANSACTIONS_ENABLED, PROCESS_ID_UUID, PROCESS_ID_SOCKET_BINDING,
             PROCESS_ID_SOCKET_MAX_PORTS, STATISTICS_ENABLED, ENABLE_TSM_STATUS, DEFAULT_TIMEOUT, MAXIMUM_TIMEOUT,
             OBJECT_STORE_RELATIVE_TO, OBJECT_STORE_PATH, JTS, USE_HORNETQ_STORE_PARAM, USE_JOURNAL_STORE_PARAM, USE_JDBC_STORE, JDBC_STORE_DATASOURCE,
             JDBC_ACTION_STORE_DROP_TABLE, JDBC_ACTION_STORE_TABLE_PREFIX, JDBC_COMMUNICATION_STORE_DROP_TABLE,
             JDBC_COMMUNICATION_STORE_TABLE_PREFIX, JDBC_STATE_STORE_DROP_TABLE, JDBC_STATE_STORE_TABLE_PREFIX,
-            JOURNAL_STORE_ENABLE_ASYNC_IO, ENABLE_STATISTICS, HORNETQ_STORE_ENABLE_ASYNC_IO, STALE_TRANSACTION_TIME
+            JOURNAL_STORE_ENABLE_ASYNC_IO, ENABLE_STATISTICS, HORNETQ_STORE_ENABLE_ASYNC_IO, STALE_TRANSACTION_TIME,
+            RECOVERY_PERIOD, RECOVERY_BACKOFF_PERIOD, ORPHAN_SAFETY_INTERVAL, ALLOW_RECOVERY_SUSPENSION,
     };
 
     static final AttributeDefinition[] attributes_1_2 = new AttributeDefinition[] {USE_JDBC_STORE, JDBC_STORE_DATASOURCE,
@@ -340,6 +377,9 @@ public class TransactionSubsystemRootResourceDefinition extends SimpleResourceDe
 
         attributesWithoutMutuals.remove(ENABLE_STATISTICS);
         attributesWithoutMutuals.remove(HORNETQ_STORE_ENABLE_ASYNC_IO);
+
+        attributesWithoutMutuals.remove(TRANSACTIONS_ENABLED);
+        attributesWithoutMutuals.remove(ORPHAN_SAFETY_INTERVAL);
 
 
         OperationStepHandler writeHandler = new ReloadRequiredWriteAttributeHandler(attributesWithoutMutuals);
@@ -369,6 +409,9 @@ public class TransactionSubsystemRootResourceDefinition extends SimpleResourceDe
         resourceRegistration.registerReadWriteAttribute(STATISTICS_ENABLED, null, new StatisticsEnabledHandler(STATISTICS_ENABLED));
         AliasedHandler esh = new AliasedHandler(STATISTICS_ENABLED.getName());
         resourceRegistration.registerReadWriteAttribute(ENABLE_STATISTICS, esh, esh);
+
+        resourceRegistration.registerReadWriteAttribute(TRANSACTIONS_ENABLED, null, new TransactionsEnabledWriteHandler(TRANSACTIONS_ENABLED));
+        resourceRegistration.registerReadWriteAttribute(ORPHAN_SAFETY_INTERVAL, null, new OrphanSafetyIntervalWriteHandler(ORPHAN_SAFETY_INTERVAL));
 
         AliasedHandler hsh = new AliasedHandler(USE_JOURNAL_STORE.getName());
         resourceRegistration.registerReadWriteAttribute(USE_HORNETQ_STORE, hsh, hsh);
@@ -586,6 +629,69 @@ public class TransactionSubsystemRootResourceDefinition extends SimpleResourceDe
             arjPropertyManager.getCoordinatorEnvironmentBean().setDefaultTimeout(valueToRestore.asInt());
             TxControl.setDefaultTimeout(valueToRestore.asInt());
             ContextTransactionManager.setGlobalDefaultTransactionTimeout(valueToRestore.asInt());
+        }
+    }
+
+    private static class TransactionsEnabledWriteHandler extends AbstractWriteAttributeHandler<Void> {
+        public TransactionsEnabledWriteHandler(final AttributeDefinition... definitions) {
+            super(definitions);
+        }
+
+        @Override
+        protected boolean applyUpdateToRuntime(final OperationContext context, final ModelNode operation,
+                                               final String attributeName, final ModelNode resolvedValue,
+                                               final ModelNode currentValue, final HandbackHolder<Void> handbackHolder)
+                throws OperationFailedException {
+            boolean transactionsEnabled = resolvedValue.asBoolean();
+
+            arjPropertyManager.getCoordinatorEnvironmentBean().setStartDisabled(!transactionsEnabled);
+            if (transactionsEnabled) {
+                TxControl.enable();
+            } else {
+                TxControl.disable();
+            }
+            return false;
+        }
+
+        @Override
+        protected void revertUpdateToRuntime(final OperationContext context, final ModelNode operation,
+                                             final String attributeName, final ModelNode valueToRestore,
+                                             final ModelNode valueToRevert, final Void handback)
+                throws OperationFailedException {
+            boolean transactionsEnabledRevertValue = valueToRestore.asBoolean();
+            arjPropertyManager.getCoordinatorEnvironmentBean().setStartDisabled(!transactionsEnabledRevertValue);
+            if (transactionsEnabledRevertValue) {
+                TxControl.enable();
+            } else {
+                TxControl.disable();
+            }
+        }
+    }
+
+    private static class OrphanSafetyIntervalWriteHandler extends AbstractWriteAttributeHandler<Void> {
+        public OrphanSafetyIntervalWriteHandler(final AttributeDefinition... definitions) {
+            super(definitions);
+        }
+
+        @Override
+        protected boolean applyUpdateToRuntime(final OperationContext context, final ModelNode operation,
+                                               final String attributeName, final ModelNode resolvedValue,
+                                               final ModelNode currentValue, final HandbackHolder<Void> handbackHolder)
+                throws OperationFailedException {
+            int orphanSafetyInterval = resolvedValue.asInt();
+            jtaPropertyManager.getJTAEnvironmentBean().setOrphanSafetyInterval(orphanSafetyInterval);
+            RecoveryXids.setSafetyIntervalMillis(orphanSafetyInterval);
+            return false;
+        }
+
+        @Override
+        protected void revertUpdateToRuntime(final OperationContext context, final ModelNode operation,
+                                             final String attributeName, final ModelNode valueToRestore,
+                                             final ModelNode valueToRevert, final Void handback)
+                throws OperationFailedException {
+            int orphanSafetyInterval = valueToRestore.asInt();
+            jtaPropertyManager.getJTAEnvironmentBean().setOrphanSafetyInterval(orphanSafetyInterval);
+            RecoveryXids.setSafetyIntervalMillis(orphanSafetyInterval);
         }
     }
 

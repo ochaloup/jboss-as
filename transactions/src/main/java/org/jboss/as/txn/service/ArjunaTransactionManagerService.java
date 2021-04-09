@@ -71,24 +71,32 @@ public final class ArjunaTransactionManagerService implements Service<com.arjuna
     private boolean coordinatorEnableStatistics;
     private int coordinatorDefaultTimeout;
     private final boolean jts;
+    private final boolean transactionsEnabled;
 
     public ArjunaTransactionManagerService(final boolean coordinatorEnableStatistics, final int coordinatorDefaultTimeout,
-                                           final boolean transactionStatusManagerEnable, final boolean jts) {
+                                           final boolean transactionStatusManagerEnable, final boolean jts, final boolean transactionsEnabled) {
         this.coordinatorEnableStatistics = coordinatorEnableStatistics;
         this.coordinatorDefaultTimeout = coordinatorDefaultTimeout;
         this.transactionStatusManagerEnable = transactionStatusManagerEnable;
         this.jts = jts;
+        this.transactionsEnabled = transactionsEnabled;
     }
 
     @Override
     public synchronized void start(final StartContext context) throws StartException {
-
+        // configuration at Environment Bean
         final CoordinatorEnvironmentBean coordinatorEnvironmentBean = arjPropertyManager.getCoordinatorEnvironmentBean();
         coordinatorEnvironmentBean.setEnableStatistics(coordinatorEnableStatistics);
         coordinatorEnvironmentBean.setDefaultTimeout(coordinatorDefaultTimeout);
         coordinatorEnvironmentBean.setTransactionStatusManagerEnable(transactionStatusManagerEnable);
-
+        coordinatorEnvironmentBean.setStartDisabled(!transactionsEnabled);
+        // ensure to define the applicable variables in the TxControl as well
         TxControl.setDefaultTimeout(coordinatorDefaultTimeout);
+        if (transactionsEnabled) {
+            TxControl.enable();
+        } else {
+            TxControl.disable();
+        }
 
         // Object Store Browser bean
         Map<String, String> objStoreBrowserTypes = new HashMap<String, String>();

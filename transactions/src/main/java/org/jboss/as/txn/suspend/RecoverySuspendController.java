@@ -22,18 +22,30 @@
 
 package org.jboss.as.txn.suspend;
 
+import static org.jboss.as.txn.logging.TransactionLogger.ROOT_LOGGER;
+
 import com.arjuna.ats.jbossatx.jta.RecoveryManagerService;
 import org.jboss.as.controller.ControlledProcessState;
+import org.jboss.as.controller.OperationContext;
+import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.server.suspend.ServerActivity;
 import org.jboss.as.server.suspend.ServerActivityCallback;
+import org.jboss.as.txn.subsystem.TransactionSubsystemRootResourceDefinition;
+import org.jboss.dmr.ModelNode;
 
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 
 /**
+ * <p>
  * Listens for notifications from a {@code SuspendController} and a {@code ProcessStateNotifier} and reacts
  * to them by {@link RecoveryManagerService#suspend() suspending} or {@link RecoveryManagerService#resume() resuming}
  * the {@link RecoveryManagerService}.
+ * </p>
+ * <p>
+ * If the {@link TransactionSubsystemRootResourceDefinition#ALLOW_RECOVERY_SUSPENSION} is configured with value {@code false}
+ * then the {@code suspend()} method execution is omitted and the recovery manager is not suspended.
+ * </p>
  *
  * @author <a href="mailto:gytis@redhat.com">Gytis Trikleris</a>
  */
@@ -42,20 +54,37 @@ public class RecoverySuspendController implements ServerActivity, PropertyChange
     private final RecoveryManagerService recoveryManagerService;
     private boolean suspended;
     private boolean running;
+    private final OperationContext context;
+    private final ModelNode model;
 
-    public RecoverySuspendController(RecoveryManagerService recoveryManagerService) {
+    public RecoverySuspendController(RecoveryManagerService recoveryManagerService, OperationContext operationContext, ModelNode modelNode) {
         this.recoveryManagerService = recoveryManagerService;
+        this.context = operationContext;
+        this.model = modelNode;
     }
 
     /**
-     * {@link RecoveryManagerService#suspend() Suspends} the {@link RecoveryManagerService}.
+     * {@link RecoveryManagerService#suspend() Suspends} the {@link RecoveryManagerService}
+     * if allowed by attribute {@link TransactionSubsystemRootResourceDefinition#ALLOW_RECOVERY_SUSPENSION}.
      */
     @Override
     public void preSuspend(ServerActivityCallback serverActivityCallback) {
-        synchronized (this) {
-            suspended = true;
+        boolean allowRecoverySuspension = true;
+        try {
+            allowRecoverySuspension = TransactionSubsystemRootResourceDefinition.ALLOW_RECOVERY_SUSPENSION
+                    .resolveModelAttribute(context, model).asBoolean(true);
+        } catch (OperationFailedException ofe) {
+            ROOT_LOGGER.cannotReadTransactionSubsystemAllowRecoverySuspensionAttribute(
+                    TransactionSubsystemRootResourceDefinition.ALLOW_RECOVERY_SUSPENSION.getName(), ofe);
         }
-        recoveryManagerService.suspend();
+
+        if (allowRecoverySuspension) {
+            synchronized (this) {
+                suspended = true;
+            }
+            recoveryManagerService.suspend();
+        }
+
         serverActivityCallback.done();
     }
 

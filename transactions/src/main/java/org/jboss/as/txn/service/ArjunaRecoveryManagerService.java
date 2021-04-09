@@ -28,6 +28,7 @@ import java.util.List;
 
 import com.arjuna.ats.internal.jta.recovery.arjunacore.SubordinateAtomicActionRecoveryModule;
 import com.arjuna.ats.internal.jta.recovery.jts.JCAServerTransactionRecoveryModule;
+import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.ProcessStateNotifier;
 import org.jboss.as.network.ManagedBinding;
 import org.jboss.as.network.SocketBinding;
@@ -35,6 +36,7 @@ import org.jboss.as.network.SocketBindingManager;
 import org.jboss.as.server.suspend.SuspendController;
 import org.jboss.as.txn.logging.TransactionLogger;
 import org.jboss.as.txn.suspend.RecoverySuspendController;
+import org.jboss.dmr.ModelNode;
 import org.jboss.msc.inject.Injector;
 import org.jboss.msc.service.Service;
 import org.jboss.msc.service.ServiceName;
@@ -76,16 +78,24 @@ public class ArjunaRecoveryManagerService implements Service<RecoveryManagerServ
     private final InjectedValue<SocketBinding> statusBindingInjector = new InjectedValue<SocketBinding>();
     private final InjectedValue<SuspendController> suspendControllerInjector = new InjectedValue<>();
     private final InjectedValue<ProcessStateNotifier> processStateInjector = new InjectedValue<>();
+    private final InjectedValue<SocketBindingManager> bindingManager = new InjectedValue<SocketBindingManager>();
 
     private RecoveryManagerService recoveryManagerService;
     private RecoverySuspendController recoverySuspendController;
-    private boolean recoveryListener;
-    private final boolean jts;
-    private InjectedValue<SocketBindingManager> bindingManager = new InjectedValue<SocketBindingManager>();
 
-    public ArjunaRecoveryManagerService(final boolean recoveryListener, final boolean jts) {
+    private final boolean recoveryListener, jts;
+    private final int recoveryPeriod, recoveryBackoffPeriod;
+    private final OperationContext operationContext;
+    private final ModelNode modelNode;
+
+    public ArjunaRecoveryManagerService(final boolean recoveryListener, final boolean jts, final int recoveryPeriod, final int recoveryBackoffPeriod,
+                                        final OperationContext operationContext, final ModelNode modelNode) {
         this.recoveryListener = recoveryListener;
         this.jts = jts;
+        this.recoveryPeriod = recoveryPeriod;
+        this.recoveryBackoffPeriod = recoveryBackoffPeriod;
+        this.operationContext = operationContext;
+        this.modelNode = modelNode;
     }
 
     public synchronized void start(StartContext context) throws StartException {
@@ -99,6 +109,8 @@ public class ArjunaRecoveryManagerService implements Service<RecoveryManagerServ
         recoveryEnvironmentBean.setTransactionStatusManagerInetAddress(statusBinding.getSocketAddress().getAddress());
         recoveryEnvironmentBean.setTransactionStatusManagerPort(statusBinding.getSocketAddress().getPort());
         recoveryEnvironmentBean.setRecoveryListener(recoveryListener);
+        recoveryEnvironmentBean.setPeriodicRecoveryPeriod(recoveryPeriod);
+        recoveryEnvironmentBean.setRecoveryBackoffPeriod(recoveryBackoffPeriod);
 
         if (recoveryListener){
             ManagedBinding binding = ManagedBinding.Factory.createSimpleManagedBinding(recoveryBinding);
@@ -163,7 +175,7 @@ public class ArjunaRecoveryManagerService implements Service<RecoveryManagerServ
             }
         }
 
-        recoverySuspendController = new RecoverySuspendController(recoveryManagerService);
+        recoverySuspendController = new RecoverySuspendController(recoveryManagerService, operationContext, modelNode);
         processStateInjector.getValue().addPropertyChangeListener(recoverySuspendController);
         suspendControllerInjector.getValue().registerActivity(recoverySuspendController);
     }

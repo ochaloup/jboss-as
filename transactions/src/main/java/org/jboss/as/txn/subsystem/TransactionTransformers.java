@@ -29,6 +29,11 @@ import static org.jboss.as.txn.subsystem.TransactionExtension.CURRENT_MODEL_VERS
 import static org.jboss.as.txn.subsystem.TransactionSubsystemRootResourceDefinition.MAXIMUM_TIMEOUT;
 import static org.jboss.as.txn.subsystem.TransactionSubsystemRootResourceDefinition.OBJECT_STORE_RELATIVE_TO;
 import static org.jboss.as.txn.subsystem.TransactionSubsystemRootResourceDefinition.STALE_TRANSACTION_TIME;
+import static org.jboss.as.txn.subsystem.TransactionSubsystemRootResourceDefinition.TRANSACTIONS_ENABLED;
+import static org.jboss.as.txn.subsystem.TransactionSubsystemRootResourceDefinition.ORPHAN_SAFETY_INTERVAL;
+import static org.jboss.as.txn.subsystem.TransactionSubsystemRootResourceDefinition.RECOVERY_BACKOFF_PERIOD;
+import static org.jboss.as.txn.subsystem.TransactionSubsystemRootResourceDefinition.RECOVERY_PERIOD;
+import static org.jboss.as.txn.subsystem.TransactionSubsystemRootResourceDefinition.ALLOW_RECOVERY_SUSPENSION;
 
 /**
  * @author Emmanuel Hugonnet (c) 2017 Red Hat, inc.
@@ -42,6 +47,7 @@ public class TransactionTransformers implements ExtensionTransformerRegistration
     static final ModelVersion MODEL_VERSION_EAP72 = ModelVersion.create(5, 0);
     static final ModelVersion MODEL_VERSION_EAP73 = ModelVersion.create(5, 1);
     static final ModelVersion MODEL_VERSION_5_2_0 = ModelVersion.create(5, 2);
+    static final ModelVersion MODEL_VERSION_6_0_0 = ModelVersion.create(6, 0);
 
 
     @Override
@@ -53,8 +59,26 @@ public class TransactionTransformers implements ExtensionTransformerRegistration
     public void registerTransformers(SubsystemTransformerRegistration subsystemRegistration) {
         ChainedTransformationDescriptionBuilder chainedBuilder = TransformationDescriptionBuilder.Factory.createChainedSubystemInstance(CURRENT_MODEL_VERSION);
 
+        // 6.1.0 --> 6.0.0
+        ResourceTransformationDescriptionBuilder builder60 = chainedBuilder.createBuilder(CURRENT_MODEL_VERSION, MODEL_VERSION_6_0_0);
+        builder60.getAttributeBuilder()
+                .setDiscard(DiscardAttributeChecker.DEFAULT_VALUE, TRANSACTIONS_ENABLED)
+                .addRejectCheck(RejectAttributeChecker.DEFINED, TRANSACTIONS_ENABLED)
+                .setDiscard(DiscardAttributeChecker.DEFAULT_VALUE, RECOVERY_PERIOD)
+                .addRejectCheck(RejectAttributeChecker.DEFINED, RECOVERY_PERIOD)
+                .setDiscard(DiscardAttributeChecker.DEFAULT_VALUE, RECOVERY_BACKOFF_PERIOD)
+                .addRejectCheck(RejectAttributeChecker.DEFINED, RECOVERY_BACKOFF_PERIOD)
+                .setDiscard(DiscardAttributeChecker.DEFAULT_VALUE, ALLOW_RECOVERY_SUSPENSION)
+                .addRejectCheck(RejectAttributeChecker.DEFINED, ALLOW_RECOVERY_SUSPENSION)
+                .setDiscard(DiscardAttributeChecker.DEFAULT_VALUE, ORPHAN_SAFETY_INTERVAL)
+                .addRejectCheck(RejectAttributeChecker.DEFINED, ORPHAN_SAFETY_INTERVAL)
+                .end();
+        builder60.addChildResource(TransactionExtension.LOG_STORE_PATH)
+                .addOperationTransformationOverride(LogStoreConstants.PROCESS_RECOVERY)
+                .setReject();
+
         // 6.0.0 --> 5.2.0
-        ResourceTransformationDescriptionBuilder builder52 = chainedBuilder.createBuilder(CURRENT_MODEL_VERSION, MODEL_VERSION_5_2_0);
+        ResourceTransformationDescriptionBuilder builder52 = chainedBuilder.createBuilder(MODEL_VERSION_6_0_0, MODEL_VERSION_5_2_0);
         builder52.getAttributeBuilder()
                 .setDiscard(DiscardAttributeChecker.DEFAULT_VALUE, STALE_TRANSACTION_TIME)
                 .addRejectCheck(RejectAttributeChecker.DEFINED, STALE_TRANSACTION_TIME)
@@ -91,7 +115,7 @@ public class TransactionTransformers implements ExtensionTransformerRegistration
         builderEap70.addChildResource(TransactionExtension.LOG_STORE_PATH)
                 .addChildResource(TransactionExtension.TRANSACTION_PATH)
                 .addChildResource(TransactionExtension.PARTICIPANT_PATH)
-                .addOperationTransformationOverride("delete")
+                .addOperationTransformationOverride(LogStoreConstants.DELETE)
                 .setReject();
 
         // 3.0.0 --> 1.5.0
@@ -117,7 +141,8 @@ public class TransactionTransformers implements ExtensionTransformerRegistration
                 MODEL_VERSION_EAP71,
                 MODEL_VERSION_EAP72,
                 MODEL_VERSION_EAP73,
-                MODEL_VERSION_5_2_0
+                MODEL_VERSION_5_2_0,
+                MODEL_VERSION_6_0_0
         });
     }
 }

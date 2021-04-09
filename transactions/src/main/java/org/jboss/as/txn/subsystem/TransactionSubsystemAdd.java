@@ -174,6 +174,7 @@ class TransactionSubsystemAdd extends AbstractBoottimeAddStepHandler {
         TransactionSubsystemRootResourceDefinition.ENABLE_TSM_STATUS.validateAndSet(operation, coordEnvModel);
         TransactionSubsystemRootResourceDefinition.DEFAULT_TIMEOUT.validateAndSet(operation, coordEnvModel);
         TransactionSubsystemRootResourceDefinition.MAXIMUM_TIMEOUT.validateAndSet(operation, coordEnvModel);
+        TransactionSubsystemRootResourceDefinition.TRANSACTIONS_ENABLED.validateAndSet(operation, coordEnvModel);
 
         ModelNode mceVal = coordEnvModel.get(TransactionSubsystemRootResourceDefinition.ENABLE_STATISTICS.getName());
         if (mceVal.isDefined()) {
@@ -190,6 +191,8 @@ class TransactionSubsystemAdd extends AbstractBoottimeAddStepHandler {
     private void populateModelWithCoreEnvConfig(ModelNode operation, ModelNode model) throws OperationFailedException {
         //core environment
         TransactionSubsystemRootResourceDefinition.NODE_IDENTIFIER.validateAndSet(operation, model);
+
+        TransactionSubsystemRootResourceDefinition.ORPHAN_SAFETY_INTERVAL.validateAndSet(operation, model);
 
         // We have some complex logic for the 'process-id' stuff because of the alternatives
         if (operation.hasDefined(TransactionSubsystemRootResourceDefinition.PROCESS_ID_UUID.getName()) && operation.get(TransactionSubsystemRootResourceDefinition.PROCESS_ID_UUID.getName()).asBoolean()) {
@@ -221,6 +224,9 @@ class TransactionSubsystemAdd extends AbstractBoottimeAddStepHandler {
         TransactionSubsystemRootResourceDefinition.BINDING.validateAndSet(operation, model);
         TransactionSubsystemRootResourceDefinition.STATUS_BINDING.validateAndSet(operation, model);
         TransactionSubsystemRootResourceDefinition.RECOVERY_LISTENER.validateAndSet(operation, model);
+        TransactionSubsystemRootResourceDefinition.RECOVERY_PERIOD.validateAndSet(operation, model);
+        TransactionSubsystemRootResourceDefinition.RECOVERY_BACKOFF_PERIOD.validateAndSet(operation, model);
+        TransactionSubsystemRootResourceDefinition.ALLOW_RECOVERY_SUSPENSION.validateAndSet(operation, model);
     }
 
     private void validateStoreConfig(ModelNode operation, ModelNode model) throws OperationFailedException {
@@ -423,8 +429,10 @@ class TransactionSubsystemAdd extends AbstractBoottimeAddStepHandler {
         final String recoveryBindingName = TransactionSubsystemRootResourceDefinition.BINDING.resolveModelAttribute(context, model).asString();
         final String recoveryStatusBindingName = TransactionSubsystemRootResourceDefinition.STATUS_BINDING.resolveModelAttribute(context, model).asString();
         final boolean recoveryListener = TransactionSubsystemRootResourceDefinition.RECOVERY_LISTENER.resolveModelAttribute(context, model).asBoolean();
+        final int recoveryPeriod = TransactionSubsystemRootResourceDefinition.RECOVERY_PERIOD.resolveModelAttribute(context, model).asInt();
+        final int recoveryBackoffPeriod = TransactionSubsystemRootResourceDefinition.RECOVERY_BACKOFF_PERIOD.resolveModelAttribute(context, model).asInt();
 
-        final ArjunaRecoveryManagerService recoveryManagerService = new ArjunaRecoveryManagerService(recoveryListener, jts);
+        final ArjunaRecoveryManagerService recoveryManagerService = new ArjunaRecoveryManagerService(recoveryListener, jts, recoveryPeriod, recoveryBackoffPeriod, context, model);
         final ServiceBuilder<?> recoveryManagerServiceServiceBuilder = serviceTarget
                 .addCapability(XA_RESOURCE_RECOVERY_REGISTRY_CAPABILITY)
                 .setInstance(recoveryManagerService)
@@ -474,8 +482,10 @@ class TransactionSubsystemAdd extends AbstractBoottimeAddStepHandler {
         }
 
         final String nodeIdentifier = TransactionSubsystemRootResourceDefinition.NODE_IDENTIFIER.resolveModelAttribute(context, model).asString();
+        final int orphanSafetyInterval = TransactionSubsystemRootResourceDefinition.ORPHAN_SAFETY_INTERVAL.resolveModelAttribute(context, model).asInt();
+
         // install Jakarta Transactions environment bean service
-        final JTAEnvironmentBeanService jtaEnvironmentBeanService = new JTAEnvironmentBeanService(nodeIdentifier);
+        final JTAEnvironmentBeanService jtaEnvironmentBeanService = new JTAEnvironmentBeanService(nodeIdentifier, orphanSafetyInterval);
         serviceTarget.addService(TxnServices.JBOSS_TXN_JTA_ENVIRONMENT, jtaEnvironmentBeanService)
                 .setInitialMode(Mode.ACTIVE)
                 .install();
@@ -522,6 +532,7 @@ class TransactionSubsystemAdd extends AbstractBoottimeAddStepHandler {
         final boolean transactionStatusManagerEnable = TransactionSubsystemRootResourceDefinition.ENABLE_TSM_STATUS.resolveModelAttribute(context, coordEnvModel).asBoolean();
         final int coordinatorDefaultTimeout = TransactionSubsystemRootResourceDefinition.DEFAULT_TIMEOUT.resolveModelAttribute(context, coordEnvModel).asInt();
         final int maximumTimeout = TransactionSubsystemRootResourceDefinition.MAXIMUM_TIMEOUT.resolveModelAttribute(context, coordEnvModel).asInt();
+        final boolean transactionsEnabled = TransactionSubsystemRootResourceDefinition.TRANSACTIONS_ENABLED.resolveModelAttribute(context, coordEnvModel).asBoolean();
 
         // WFLY-9955 Allow the timeout set to "0" while translating into the maximum timeout
         if (coordinatorDefaultTimeout == 0) {
@@ -530,7 +541,7 @@ class TransactionSubsystemAdd extends AbstractBoottimeAddStepHandler {
         } else {
             ContextTransactionManager.setGlobalDefaultTransactionTimeout(coordinatorDefaultTimeout);
         }
-        final ArjunaTransactionManagerService transactionManagerService = new ArjunaTransactionManagerService(coordinatorEnableStatistics, coordinatorDefaultTimeout, transactionStatusManagerEnable, jts);
+        final ArjunaTransactionManagerService transactionManagerService = new ArjunaTransactionManagerService(coordinatorEnableStatistics, coordinatorDefaultTimeout, transactionStatusManagerEnable, jts, transactionsEnabled);
         final ServiceBuilder<com.arjuna.ats.jbossatx.jta.TransactionManagerService> transactionManagerServiceServiceBuilder = context.getServiceTarget().addService(TxnServices.JBOSS_TXN_ARJUNA_TRANSACTION_MANAGER, transactionManagerService);
         // add dependency on Jakarta Transactions environment bean service
         transactionManagerServiceServiceBuilder.addDependency(TxnServices.JBOSS_TXN_JTA_ENVIRONMENT, JTAEnvironmentBean.class, transactionManagerService.getJTAEnvironmentBeanInjector());
