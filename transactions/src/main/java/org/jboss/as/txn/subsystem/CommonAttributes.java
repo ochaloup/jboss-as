@@ -37,6 +37,8 @@ interface CommonAttributes {
     /** transaction status manager (TSM) service, needed for out of process recovery, should be provided or not */
     String ENABLE_TSM_STATUS = "enable-tsm-status";
     String NODE_IDENTIFIER = "node-identifier";
+    String ORPHAN_SAFETY_INTERVAL = "orphan-safety-interval";
+    String TRANSACTIONS_ENABLED = "transactions-enabled";
     String OBJECT_STORE = "object-store";
     String OBJECT_STORE_PATH = "object-store-path";
     String OBJECT_STORE_RELATIVE_TO = "object-store-relative-to";
@@ -66,6 +68,8 @@ interface CommonAttributes {
     String LOG_STORE = "log-store";
     String RECOVERY_ENVIRONMENT = "recovery-environment";
     String RECOVERY_LISTENER = "recovery-listener";
+    String RECOVERY_PERIOD = "recovery-period";
+    String RECOVERY_BACKOFF_PERIOD = "recovery-backoff-period";
     /** The process-id/socket element */
     String SOCKET = "socket";
     /** The process-id/socket attribute for max ports */

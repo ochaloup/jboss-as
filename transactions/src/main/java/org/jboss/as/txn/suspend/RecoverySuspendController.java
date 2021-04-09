@@ -24,8 +24,12 @@ package org.jboss.as.txn.suspend;
 
 import com.arjuna.ats.jbossatx.jta.RecoveryManagerService;
 import org.jboss.as.controller.ControlledProcessState;
+import org.jboss.as.controller.OperationContext;
+import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.server.suspend.ServerActivity;
 import org.jboss.as.server.suspend.ServerActivityCallback;
+import org.jboss.as.txn.subsystem.TransactionSubsystemRootResourceDefinition;
+import org.jboss.dmr.ModelNode;
 
 import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
@@ -42,9 +46,13 @@ public class RecoverySuspendController implements ServerActivity, PropertyChange
     private final RecoveryManagerService recoveryManagerService;
     private boolean suspended;
     private boolean running;
+    private final OperationContext context;
+    private final ModelNode model;
 
-    public RecoverySuspendController(RecoveryManagerService recoveryManagerService) {
+    public RecoverySuspendController(RecoveryManagerService recoveryManagerService, OperationContext operationContext, ModelNode modelNode) {
         this.recoveryManagerService = recoveryManagerService;
+        this.context = operationContext;
+        this.model = modelNode;
     }
 
     /**
@@ -52,6 +60,14 @@ public class RecoverySuspendController implements ServerActivity, PropertyChange
      */
     @Override
     public void preSuspend(ServerActivityCallback serverActivityCallback) {
+        try {
+            if(TransactionSubsystemRootResourceDefinition.RECOVERY_LISTENER.resolveModelAttribute(context, model).asBoolean(false)) {
+                System.out.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>> not doing the susped stuf of the recovery!!!!!");
+                return;
+            }
+        } catch (OperationFailedException ofe) {
+            ofe.printStackTrace();
+        }
         synchronized (this) {
             suspended = true;
         }
