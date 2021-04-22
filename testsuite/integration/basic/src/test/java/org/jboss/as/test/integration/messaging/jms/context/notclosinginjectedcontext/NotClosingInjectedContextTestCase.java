@@ -156,6 +156,7 @@ public class NotClosingInjectedContextTestCase {
             String sizeAfter = getLogLineCount(managementClient.getControllerClient());
 
             long difference = Long.parseLong(sizeAfter) - Long.parseLong(sizeBefore);
+            System.out.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> not closing before: " + sizeBefore + ", after: " + sizeAfter);
 
             //validate, that there is no "IJ000100: Closing a connection for you. Please close them yourself"
             List<ModelNode> lines = getLogs(managementClient.getControllerClient(), difference);

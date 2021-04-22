@@ -115,7 +115,7 @@ public class DatabaseTimerServiceMultiNodeTestCase {
             datasourceAddModelNode.get("enabled").set(true);
             datasourceAddModelNode.get("driver-name").set("h2");
             datasourceAddModelNode.get("pool-name").set("MyNewDs_Pool");
-            datasourceAddModelNode.get("connection-url").set("jdbc:h2:" + server.getURL() + "/mem:testdb;DB_CLOSE_DELAY=-1");
+            datasourceAddModelNode.get("connection-url").set("jdbc:h2:" + server.getURL() + "/mem:testdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE");
             datasourceAddModelNode.get("user-name").set("sa");
             datasourceAddModelNode.get("password").set("sa");
             steps.add(datasourceAddModelNode);
