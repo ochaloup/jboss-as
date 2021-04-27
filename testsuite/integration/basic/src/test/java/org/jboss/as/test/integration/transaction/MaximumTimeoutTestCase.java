@@ -116,12 +116,19 @@ public class MaximumTimeoutTestCase {
         executeForResult(client, writeMaxTimeout);
     }
 
-    static List<ModelNode> getLogs(final ModelControllerClient client) {
+    static List<ModelNode> getLogs(final ModelControllerClient client, int numberOfLines) {
         // /subsystem=logging/log-file=server.log:read-log-file(lines=-1)
         ModelNode op = Util.createEmptyOperation("read-log-file", LOG_FILE_ADDRESS);
-        op.get("lines").set(-1);
+        // by default the lines are printed from the end of the file
+        op.get("lines").set(numberOfLines);
         return executeForResult(client, op).asList();
 
+    }
+
+    private long getLogByteSize(final ModelControllerClient client) {
+        ModelNode op = Util.createEmptyOperation("read-attribute", LOG_FILE_ADDRESS);
+        op.get("name").set("file-size");
+        return Long.parseLong(executeForResult(client, op).asString());
     }
 
     static ModelNode executeForResult(final ModelControllerClient client, final ModelNode operation) {
@@ -195,11 +202,15 @@ public class MaximumTimeoutTestCase {
 
     @Test
     public void testLogFile() {
+        long logByteSizeBefore = getLogByteSize(managementClient.getControllerClient());
+
         setMaximumTimeout(managementClient.getControllerClient(), MAX_TIMEOUT1);
         setDefaultTimeout(managementClient.getControllerClient(), NO_TIMEOUT);
         setMaximumTimeout(managementClient.getControllerClient(), MAX_TIMEOUT2);
 
-        List<ModelNode> nodes = getLogs(managementClient.getControllerClient());
+        long logByteSizeAfter = getLogByteSize(managementClient.getControllerClient());
+        System.out.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>> before " + logByteSizeBefore + ", after: " + logByteSizeAfter);
+        List<ModelNode> nodes = getLogs(managementClient.getControllerClient(), Long.valueOf(logByteSizeAfter - logByteSizeBefore).intValue());
         boolean firstMessageFound = false;
         boolean secondMessageFound = false;
         for (ModelNode node : nodes) {
