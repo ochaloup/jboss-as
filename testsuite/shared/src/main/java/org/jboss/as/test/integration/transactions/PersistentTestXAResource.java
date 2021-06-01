@@ -41,7 +41,8 @@ import java.util.Collection;
  */
 public class PersistentTestXAResource extends TestXAResource implements XAResource {
     private static final Logger log = Logger.getLogger(PersistentTestXAResource.class);
-    private XidsPersister xidsPersister = new XidsPersister(PersistentTestXAResource.class.getSimpleName());
+    public static final String XIDS_PERSISTER_FILE_NAME = PersistentTestXAResource.class.getSimpleName();
+    private XidsPersister xidsPersister = new XidsPersister(XIDS_PERSISTER_FILE_NAME);
 
     public PersistentTestXAResource() {
         super();

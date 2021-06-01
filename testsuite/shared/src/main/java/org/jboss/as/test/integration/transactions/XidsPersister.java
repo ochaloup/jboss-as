@@ -41,13 +41,19 @@ import java.util.Collection;
  * to the file under <code>jboss.server.data.dir</code>.
  * This capability is needed when server crash with recovery is tested.
  */
-class XidsPersister {
+public class XidsPersister {
     private static final Logger log = Logger.getLogger(XidsPersister.class);
 
     private String fileToPersit;
+    private File directoryToPersist;
 
     XidsPersister(String fileToPersit) {
         this.fileToPersit = fileToPersit;
+    }
+
+    public XidsPersister(File directoryToPersist, String fileToPersit) {
+        this.fileToPersit = fileToPersit;
+        this.directoryToPersist = directoryToPersist;
     }
 
     synchronized void writeToDisk(Collection<Xid> xidsToSave) {
@@ -70,7 +76,7 @@ class XidsPersister {
     }
 
     @SuppressWarnings("unchecked")
-    synchronized Collection<Xid> recoverFromDisk() {
+    public synchronized Collection<Xid> recoverFromDisk() {
         Path logFile = getLogFile();
         if (!logFile.toFile().exists()) {
             log.debugf("There is no file %s with recovery data for the test XAResource, no data for recovery", logFile);
@@ -99,7 +105,10 @@ class XidsPersister {
 
     private Path getLogFile() {
         try {
-            File dataDir = new File(System.getProperty("jboss.server.data.dir"));
+            File dataDir = directoryToPersist;
+            if (dataDir == null) {
+                dataDir = new File(System.getProperty("jboss.server.data.dir"));
+            }
             dataDir.mkdirs();
             return dataDir.toPath().resolve(this.fileToPersit);
         } catch (InvalidPathException e) {
