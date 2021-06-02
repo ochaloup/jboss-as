@@ -134,6 +134,12 @@ public class TransactionSubsystemRootResourceDefinition extends SimpleResourceDe
             .setXmlName(Attribute.RECOVERY_BACKOFF_PERIOD.getLocalName())
             .setAllowExpression(true).build();
 
+    public static final SimpleAttributeDefinition ALLOW_RECOVERY_SUSPENSION = new SimpleAttributeDefinitionBuilder(CommonAttributes.ALLOW_RECOVERY_SUSPENSION, ModelType.BOOLEAN, true)
+            .setDefaultValue(ModelNode.TRUE)
+            .setFlags(AttributeAccess.Flag.RESTART_NONE)
+            .setXmlName(Attribute.ALLOW_RECOVERY_SUSPENSION.getLocalName())
+            .setAllowExpression(true).build();
+
     //core environment
     public static final SimpleAttributeDefinition NODE_IDENTIFIER = new SimpleAttributeDefinitionBuilder(CommonAttributes.NODE_IDENTIFIER, ModelType.STRING, true)
             .setDefaultValue(new ModelNode().set("1"))
@@ -341,7 +347,7 @@ public class TransactionSubsystemRootResourceDefinition extends SimpleResourceDe
             JDBC_ACTION_STORE_DROP_TABLE, JDBC_ACTION_STORE_TABLE_PREFIX, JDBC_COMMUNICATION_STORE_DROP_TABLE,
             JDBC_COMMUNICATION_STORE_TABLE_PREFIX, JDBC_STATE_STORE_DROP_TABLE, JDBC_STATE_STORE_TABLE_PREFIX,
             JOURNAL_STORE_ENABLE_ASYNC_IO, ENABLE_STATISTICS, HORNETQ_STORE_ENABLE_ASYNC_IO, STALE_TRANSACTION_TIME,
-            RECOVERY_PERIOD, RECOVERY_BACKOFF_PERIOD, ORPHAN_SAFETY_INTERVAL,
+            RECOVERY_PERIOD, RECOVERY_BACKOFF_PERIOD, ORPHAN_SAFETY_INTERVAL, ALLOW_RECOVERY_SUSPENSION,
     };
 
     static final AttributeDefinition[] attributes_1_2 = new AttributeDefinition[] {USE_JDBC_STORE, JDBC_STORE_DATASOURCE,

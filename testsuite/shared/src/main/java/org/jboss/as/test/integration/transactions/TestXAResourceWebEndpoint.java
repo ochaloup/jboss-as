@@ -46,23 +46,23 @@ public class TestXAResourceWebEndpoint extends HttpServlet {
         String requestPathInfo = request.getPathInfo();
         log.debug("request for servlet path " + request.getServletPath() + ", path info " + requestPathInfo);
         if (requestPathInfo.endsWith("/committed")) {
-            out.println(checkerSingleton.getCommitted());
+            out.print(checkerSingleton.getCommitted());
         } else if (requestPathInfo.endsWith("/rolledback")) {
-            out.println(checkerSingleton.getRolledback());
+            out.print(checkerSingleton.getRolledback());
         } else if (requestPathInfo.endsWith("/prepared")) {
-            out.println(checkerSingleton.getPrepared());
+            out.print(checkerSingleton.getPrepared());
         } else if (requestPathInfo.endsWith("/reset")) {
             checkerSingleton.resetAll();
-            out.println(SUCCESS_RESPONSE);
+            out.print(SUCCESS_RESPONSE);
         } else if (requestPathInfo.endsWith("/clearpersistency")) {
             new XidsPersister(PersistentTestXAResource.XIDS_PERSISTER_FILE_NAME).writeToDisk(null);
-            out.println(SUCCESS_RESPONSE);
+            out.print(SUCCESS_RESPONSE);
         } else if (requestPathInfo.endsWith("/clearprepared")) {
             TestXAResource.getPreparedXids().clear();
-            out.println(SUCCESS_RESPONSE);
+            out.print(SUCCESS_RESPONSE);
         } else {
             response.setStatus(HttpServletResponse.SC_NOT_IMPLEMENTED);
-            out.println("No handler for path '" + requestPathInfo + "'");
+            out.print("No handler for path '" + requestPathInfo + "'");
         }
     }
 

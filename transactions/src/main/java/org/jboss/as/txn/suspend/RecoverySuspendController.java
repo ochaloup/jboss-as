@@ -22,6 +22,8 @@
 
 package org.jboss.as.txn.suspend;
 
+import static org.jboss.as.txn.logging.TransactionLogger.ROOT_LOGGER;
+
 import com.arjuna.ats.jbossatx.jta.RecoveryManagerService;
 import org.jboss.as.controller.ControlledProcessState;
 import org.jboss.as.controller.OperationContext;
@@ -35,9 +37,15 @@ import java.beans.PropertyChangeEvent;
 import java.beans.PropertyChangeListener;
 
 /**
+ * <p>
  * Listens for notifications from a {@code SuspendController} and a {@code ProcessStateNotifier} and reacts
  * to them by {@link RecoveryManagerService#suspend() suspending} or {@link RecoveryManagerService#resume() resuming}
  * the {@link RecoveryManagerService}.
+ * </p>
+ * <p>
+ * If the {@link TransactionSubsystemRootResourceDefinition#ALLOW_RECOVERY_SUSPENSION} is configured with value {@code false}
+ * then the {@code suspend()} method execution is omitted and the recovery manager is not suspended.
+ * </p>
  *
  * @author <a href="mailto:gytis@redhat.com">Gytis Trikleris</a>
  */
@@ -56,22 +64,27 @@ public class RecoverySuspendController implements ServerActivity, PropertyChange
     }
 
     /**
-     * {@link RecoveryManagerService#suspend() Suspends} the {@link RecoveryManagerService}.
+     * {@link RecoveryManagerService#suspend() Suspends} the {@link RecoveryManagerService}
+     * if allowed by attribute {@link TransactionSubsystemRootResourceDefinition#ALLOW_RECOVERY_SUSPENSION}.
      */
     @Override
     public void preSuspend(ServerActivityCallback serverActivityCallback) {
+        boolean allowRecoverySuspension = true;
         try {
-            if(TransactionSubsystemRootResourceDefinition.RECOVERY_LISTENER.resolveModelAttribute(context, model).asBoolean(false)) {
-                System.out.println(">>>>>>>>>>>>>>>>>>>>>>>>>>>>> not doing the susped stuf of the recovery!!!!!");
-                return;
-            }
+            allowRecoverySuspension = TransactionSubsystemRootResourceDefinition.ALLOW_RECOVERY_SUSPENSION
+                    .resolveModelAttribute(context, model).asBoolean(true);
         } catch (OperationFailedException ofe) {
-            ofe.printStackTrace();
+            ROOT_LOGGER.cannotReadTransactionSubsystemAllowRecoverySuspensionAttribute(
+                    TransactionSubsystemRootResourceDefinition.ALLOW_RECOVERY_SUSPENSION.getName(), ofe);
         }
-        synchronized (this) {
-            suspended = true;
+
+        if (allowRecoverySuspension) {
+            synchronized (this) {
+                suspended = true;
+            }
+            recoveryManagerService.suspend();
         }
-        recoveryManagerService.suspend();
+
         serverActivityCallback.done();
     }
 

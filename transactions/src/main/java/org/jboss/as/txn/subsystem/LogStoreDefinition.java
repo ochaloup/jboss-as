@@ -65,11 +65,11 @@ public class LogStoreDefinition extends SimpleResourceDefinition {
                                 .build();
         resourceRegistration.registerOperationHandler(probe, LogStoreProbeHandler.INSTANCE);
 
-        final OperationDefinition processRecoveryScan = new SimpleOperationDefinitionBuilder(LogStoreConstants.PROCESS_RECOVERY, getResourceDescriptionResolver())
+        final OperationDefinition processRecovery = new SimpleOperationDefinitionBuilder(LogStoreConstants.PROCESS_RECOVERY, getResourceDescriptionResolver())
                 .setRuntimeOnly()
                 .setReadOnly()
                 .build();
-        resourceRegistration.registerOperationHandler(processRecoveryScan, LogStoreProcessRecoveryHandler.INSTANCE);
+        resourceRegistration.registerOperationHandler(processRecovery, LogStoreProcessRecoveryHandler.INSTANCE);
     }
 
 

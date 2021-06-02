@@ -26,7 +26,6 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
-import com.arjuna.ats.arjuna.recovery.RecoveryManager;
 import com.arjuna.ats.internal.jta.recovery.arjunacore.SubordinateAtomicActionRecoveryModule;
 import com.arjuna.ats.internal.jta.recovery.jts.JCAServerTransactionRecoveryModule;
 import org.jboss.as.controller.OperationContext;
@@ -196,14 +195,6 @@ public class ArjunaRecoveryManagerService implements Service<RecoveryManagerServ
 
     public synchronized RecoveryManagerService getValue() throws IllegalStateException, IllegalArgumentException {
         return recoveryManagerService;
-    }
-
-    public void scan() {
-        RecoveryManager.manager().scan();
-        // necessary to process two sequential scans to be sure that the whole recovery processing was run
-        // if a recovery processing is in progress during the first scan then the first execution
-        // only waits for the currently processing to finish and would not go through both phases
-        RecoveryManager.manager().scan();
     }
 
     public Injector<ORB> getOrbInjector() {

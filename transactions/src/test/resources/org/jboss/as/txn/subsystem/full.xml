@@ -28,7 +28,7 @@
         </process-id>
     </core-environment>
     <recovery-environment socket-binding="txn-recovery-environment" status-socket-binding="txn-status-manager"
-                          recovery-listener="false" recovery-period="120" recovery-backoff-period="10" />
+                          recovery-listener="false" recovery-period="120" recovery-backoff-period="10" allow-recovery-suspension="true" />
     <coordinator-environment enable-statistics="true" enable-tsm-status="true"
                              default-timeout="300" transactions-enabled="true" />
     <object-store path="tx-object-store" relative-to="jboss.server.data.dir"/>

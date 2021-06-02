@@ -226,6 +226,7 @@ class TransactionSubsystemAdd extends AbstractBoottimeAddStepHandler {
         TransactionSubsystemRootResourceDefinition.RECOVERY_LISTENER.validateAndSet(operation, model);
         TransactionSubsystemRootResourceDefinition.RECOVERY_PERIOD.validateAndSet(operation, model);
         TransactionSubsystemRootResourceDefinition.RECOVERY_BACKOFF_PERIOD.validateAndSet(operation, model);
+        TransactionSubsystemRootResourceDefinition.ALLOW_RECOVERY_SUSPENSION.validateAndSet(operation, model);
     }
 
     private void validateStoreConfig(ModelNode operation, ModelNode model) throws OperationFailedException {

@@ -33,6 +33,7 @@ import static org.jboss.as.txn.subsystem.TransactionSubsystemRootResourceDefinit
 import static org.jboss.as.txn.subsystem.TransactionSubsystemRootResourceDefinition.ORPHAN_SAFETY_INTERVAL;
 import static org.jboss.as.txn.subsystem.TransactionSubsystemRootResourceDefinition.RECOVERY_BACKOFF_PERIOD;
 import static org.jboss.as.txn.subsystem.TransactionSubsystemRootResourceDefinition.RECOVERY_PERIOD;
+import static org.jboss.as.txn.subsystem.TransactionSubsystemRootResourceDefinition.ALLOW_RECOVERY_SUSPENSION;
 
 /**
  * @author Emmanuel Hugonnet (c) 2017 Red Hat, inc.
@@ -67,6 +68,8 @@ public class TransactionTransformers implements ExtensionTransformerRegistration
                 .addRejectCheck(RejectAttributeChecker.DEFINED, RECOVERY_PERIOD)
                 .setDiscard(DiscardAttributeChecker.DEFAULT_VALUE, RECOVERY_BACKOFF_PERIOD)
                 .addRejectCheck(RejectAttributeChecker.DEFINED, RECOVERY_BACKOFF_PERIOD)
+                .setDiscard(DiscardAttributeChecker.DEFAULT_VALUE, ALLOW_RECOVERY_SUSPENSION)
+                .addRejectCheck(RejectAttributeChecker.DEFINED, ALLOW_RECOVERY_SUSPENSION)
                 .setDiscard(DiscardAttributeChecker.DEFAULT_VALUE, ORPHAN_SAFETY_INTERVAL)
                 .addRejectCheck(RejectAttributeChecker.DEFINED, ORPHAN_SAFETY_INTERVAL)
                 .end();

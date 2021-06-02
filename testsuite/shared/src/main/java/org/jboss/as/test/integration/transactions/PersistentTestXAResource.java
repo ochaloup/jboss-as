@@ -133,6 +133,6 @@ public class PersistentTestXAResource extends TestXAResource implements XAResour
     // overriding the org.jboss.tm.XAResourceWrapper implementation from parent
     @Override
     public String getJndiName() {
-        return PersistentTestAction.class.getSimpleName() + ":" + xidsPersister.getLogFile();
+        return PersistentTestXAResource.class.getSimpleName() + ":" + xidsPersister.getLogFile();
     }
 }

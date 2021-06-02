@@ -18,23 +18,24 @@
 
 package org.jboss.as.txn.subsystem;
 
+import com.arjuna.ats.arjuna.recovery.RecoveryManager;
 import org.jboss.as.controller.OperationContext;
 import org.jboss.as.controller.OperationFailedException;
 import org.jboss.as.controller.OperationStepHandler;
-import org.jboss.as.txn.service.ArjunaRecoveryManagerService;
-import org.jboss.as.txn.service.TxnServices;
 import org.jboss.dmr.ModelNode;
 
 /**
- * Handler for explicitly running recovery scan.
+ * Handler for explicitly running Narayana recovery scan.
  */
 public class LogStoreProcessRecoveryHandler implements OperationStepHandler {
     static final LogStoreProcessRecoveryHandler INSTANCE = new LogStoreProcessRecoveryHandler();
 
     public void execute(OperationContext context, ModelNode operation) throws OperationFailedException {
-        ArjunaRecoveryManagerService arjunaWildFlyRecoveryManagerService = (ArjunaRecoveryManagerService) context.getServiceRegistry(false)
-                .getRequiredService(TxnServices.JBOSS_TXN_ARJUNA_RECOVERY_MANAGER).getValue();
-        arjunaWildFlyRecoveryManagerService.scan();
+        RecoveryManager.manager().scan();
+        // necessary to process two sequential scans to be sure that the whole recovery processing was run
+        // if a recovery processing is in progress during the first scan then the first execution
+        // only waits for the currently processing to finish and would not go through both phases
+        RecoveryManager.manager().scan();
     }
 
 }

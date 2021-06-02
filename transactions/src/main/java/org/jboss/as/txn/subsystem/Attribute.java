@@ -46,6 +46,7 @@ enum Attribute {
     RECOVERY_LISTENER("recovery-listener"),
     RECOVERY_PERIOD("recovery-period"),
     RECOVERY_BACKOFF_PERIOD("recovery-backoff-period"),
+    ALLOW_RECOVERY_SUSPENSION("allow-recovery-suspension"),
     RELATIVE_TO("relative-to"),
     STATISTICS_ENABLED("statistics-enabled"),
     PATH("path"),

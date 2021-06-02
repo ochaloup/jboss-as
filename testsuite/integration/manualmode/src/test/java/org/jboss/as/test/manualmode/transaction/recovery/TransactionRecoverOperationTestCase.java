@@ -35,7 +35,6 @@ import org.jboss.as.test.integration.transactions.XidsPersister;
 import org.jboss.as.test.shared.TestSuiteEnvironment;
 import org.jboss.as.test.shared.TimeoutUtil;
 import org.jboss.dmr.ModelNode;
-import org.jboss.logging.Logger;
 import org.jboss.shrinkwrap.api.ShrinkWrap;
 import org.jboss.shrinkwrap.api.asset.StringAsset;
 import org.jboss.shrinkwrap.api.spec.WebArchive;
@@ -55,22 +54,22 @@ import java.util.Collection;
 @RunWith(Arquillian.class)
 @RunAsClient
 public class TransactionRecoverOperationTestCase extends AbstractCliTestBase {
-    private static final Logger log = Logger.getLogger(TransactionRecoverOperationTestCase.class);
-
     private static final int CLI_INIT_TIMEOUT = TimeoutUtil.adjust(20_000);
     private static final String CONTAINER = "default-jbossas";
     private static final String DEPLOYMENT_NAME = "transaction-recovery-operation";
 
     // wflyDataDir is place where container 'default-jbossas' stores the data (see arquillian.xml)
-    private static File wflyDataDir = Paths.get(System.getProperty("jbossas.ts.submodule.dir"), "target", "wildfly", "standalone", "data").toFile();
-    private static XidsPersister xidsPersister = new XidsPersister(wflyDataDir, PersistentTestXAResource.XIDS_PERSISTER_FILE_NAME);
+    private static final File wflyDataDir = Paths.get(System.getProperty("jbossas.ts.submodule.dir"), "target", "wildfly", "standalone", "data").toFile();
+    private static final XidsPersister xidsPersister = new XidsPersister(wflyDataDir, PersistentTestXAResource.XIDS_PERSISTER_FILE_NAME);
 
     private static final String ORPHAN_SAFETY_INTERVAL_ATTRIBUTE_NAME = "orphan-safety-interval";
     private static final String RECOVERY_PERIOD_ATTRIBUTE_NAME = "recovery-period";
     private static final String RECOVERY_BACKOFF_PERIOD_ATTRIBUTE_NAME = "recovery-backoff-period";
+    private static final String ALLOW_RECOVERY_SUSPENSION_ATTRIBUTE_NAME = "allow-recovery-suspension";
     private static final String RECOVERY_INITIALIZATION_OFFSET_SYSTEM_PROPERTY_NAME = "RecoveryEnvironmentBean.periodicRecoveryInitilizationOffset";
 
     private int orphanSafetyIntervalOriginal, recoveryPeriodOriginal, recoveryBackoffPeriodOriginal;
+    private boolean allowRecoverySuspensionOriginal;
 
     @ArquillianResource
     private ContainerController container;
@@ -82,7 +81,7 @@ public class TransactionRecoverOperationTestCase extends AbstractCliTestBase {
     public static WebArchive deployment() {
         return ShrinkWrap.create(WebArchive.class, DEPLOYMENT_NAME + ".war")
             .addClasses(TransactionRecoveryApplication.class, TransactionRecoveryEndPoint.class)
-            .addPackage(TestXAResource.class.getPackage())
+            .addPackages(true, TestXAResource.class.getPackage())
             .addAsManifestResource(new StringAsset("Dependencies: org.jboss.jboss-transaction-spi\n"), "MANIFEST.MF");
         // TODO: permissions for security manager
     }
@@ -97,7 +96,8 @@ public class TransactionRecoverOperationTestCase extends AbstractCliTestBase {
         orphanSafetyIntervalOriginal = readAttributeAsInt(ORPHAN_SAFETY_INTERVAL_ATTRIBUTE_NAME);
         recoveryPeriodOriginal = readAttributeAsInt(RECOVERY_PERIOD_ATTRIBUTE_NAME);
         recoveryBackoffPeriodOriginal = readAttributeAsInt(RECOVERY_BACKOFF_PERIOD_ATTRIBUTE_NAME);
-
+        allowRecoverySuspensionOriginal = readAttributeAsBoolean(ALLOW_RECOVERY_SUSPENSION_ATTRIBUTE_NAME);
+        // reset Xid records of the PersistentTestXAResource
         xidsPersister.writeToDisk(null);
     }
 
@@ -111,6 +111,7 @@ public class TransactionRecoverOperationTestCase extends AbstractCliTestBase {
         writeAttribute(ORPHAN_SAFETY_INTERVAL_ATTRIBUTE_NAME, orphanSafetyIntervalOriginal);
         writeAttribute(RECOVERY_PERIOD_ATTRIBUTE_NAME, recoveryPeriodOriginal);
         writeAttribute(RECOVERY_BACKOFF_PERIOD_ATTRIBUTE_NAME, recoveryBackoffPeriodOriginal);
+        writeAttribute(ALLOW_RECOVERY_SUSPENSION_ATTRIBUTE_NAME, allowRecoverySuspensionOriginal);
         removeSystemProperty(RECOVERY_INITIALIZATION_OFFSET_SYSTEM_PROPERTY_NAME);
 
         closeCLI();
@@ -121,6 +122,8 @@ public class TransactionRecoverOperationTestCase extends AbstractCliTestBase {
 
     @Test
     public void testRecovery() throws Exception {
+        // deactivate automatic recovery processing by offsetting start time of the periodic recovery
+        // (the system property value is considered after JVM restart)
         writeSystemProperty(RECOVERY_INITIALIZATION_OFFSET_SYSTEM_PROPERTY_NAME, 3600);
 
         final URI baseUri = new URI("http://" + TestSuiteEnvironment.getHttpAddress() + ":" + TestSuiteEnvironment.getHttpPort()
@@ -143,18 +146,19 @@ public class TransactionRecoverOperationTestCase extends AbstractCliTestBase {
         writeAttribute(ORPHAN_SAFETY_INTERVAL_ATTRIBUTE_NAME, 1);
         writeAttribute(RECOVERY_PERIOD_ATTRIBUTE_NAME, 1);
         writeAttribute(RECOVERY_BACKOFF_PERIOD_ATTRIBUTE_NAME, 1);
-        // the recovery period attributes require reload and then they should  be activated
-        cli.sendLine("reload");
+        writeAttribute(ALLOW_RECOVERY_SUSPENSION_ATTRIBUTE_NAME, false);
+        // reload to activate the recovery period attributes (requiring reload)
+        cli.sendLine(":reload(start-mode=suspend)");
         assertState("running", CLI_INIT_TIMEOUT, ":read-attribute(name=server-state)");
 
-        assertCommittedRolledback(baseUri, 0, 0);
         // let's recover and expecting to finish with it faster than 10 seconds which is the default backoff period and which defines default time for recovery
         long startTimeStamp = System.currentTimeMillis();
         cli.sendLine("/subsystem=transactions/log-store=log-store:process-recovery");
         int recoveryTimeProcessing = Long.valueOf(System.currentTimeMillis() - startTimeStamp).intValue();
-        Assert.assertTrue(recoveryTimeProcessing < TimeoutUtil.adjust(9_000) ); // 9 seconds
-        Assert.assertEquals("XA resource is expected to be recovered", 0, xidsPersister.recoverFromDisk().size());
-        assertCommittedRolledback(baseUri, 0, 1);
+        Assert.assertTrue("Recovery processing expected to be finished in shorter time than the default 10 seconds",
+                recoveryTimeProcessing < TimeoutUtil.adjust(9_000) ); // 9 seconds
+        // recovery should rolled-back the orphan prepared XAResource
+        Assert.assertEquals("XA resource is expected to be recovered",0, xidsPersister.recoverFromDisk().size());
     }
 
     private ModelNode writeSystemProperty(String systemProperty, int value) {
@@ -191,8 +195,16 @@ public class TransactionRecoverOperationTestCase extends AbstractCliTestBase {
     }
 
     private ModelNode writeAttribute(String attributeName, int value) {
+        return writeAttribute(attributeName, Integer.toString(value));
+    }
+
+    private ModelNode writeAttribute(String attributeName, boolean value) {
+        return writeAttribute(attributeName, Boolean.toString(value));
+    }
+
+    private ModelNode writeAttribute(String attributeName, String value) {
         try {
-            String writeOperation = String.format("/subsystem=transactions:write-attribute(name=%s, value=%d)", attributeName, value);
+            String writeOperation = String.format("/subsystem=transactions:write-attribute(name=%s, value=%s)", attributeName, value);
             cli.sendLine(writeOperation);
 
             ModelNode resultModelNode = cli.readAllAsOpResult().getResponseNode();
@@ -203,48 +215,28 @@ public class TransactionRecoverOperationTestCase extends AbstractCliTestBase {
         }
     }
 
+    private boolean readAttributeAsBoolean(String attributeName) {
+        return readAttribute(attributeName).asBoolean();
+    }
+
     private int readAttributeAsInt(String attributeName) {
+        return readAttribute(attributeName).asInt();
+    }
+
+    private ModelNode readAttribute(String attributeName) {
         try {
             String readOperation = String.format("/subsystem=transactions:read-attribute(name=%s)", attributeName);
             cli.sendLine(readOperation);
             ModelNode result = cli.readAllAsOpResult().getResponseNode();
             assertSuccess(result, readOperation);
-            return result.get(ModelDescriptionConstants.RESULT).asInt();
+            return result.get(ModelDescriptionConstants.RESULT);
         } catch (Exception e) {
             throw new IllegalStateException("Cannot read attribute " + attributeName + " with CLI", e);
-        }
-    }
-
-    private void reInitCli() {
-        try {
-            closeCLI();
-        } catch (Exception expected) {
-        } finally {
-            try {
-                initCLI();
-            } catch (Exception e) {
-                throw new IllegalStateException("Cannot reinitialize CLI after container was restarted", e);
-            }
         }
     }
 
     private void assertSuccess(ModelNode result, String operation) {
         Assert.assertEquals("Expecting operation '" + operation + "' to succeed",
                 ModelDescriptionConstants.SUCCESS, result.get(ModelDescriptionConstants.OUTCOME).asString());
-    }
-
-    private void assertCommittedRolledback(URI baseUri, int assertCommitted, int assertRolledback) {
-        URI committedUri = baseUri.resolve("testxaresource/committed");
-        URI rolledbackUri = baseUri.resolve("testxaresource/rolledback");
-        try {
-            String committed = Utils.makeCall(committedUri, 200);
-            String rolledback = Utils.makeCall(rolledbackUri, 200);
-            int committedAsInt = Integer.valueOf(committed);
-            int rolledbackAsInt = Integer.valueOf(rolledback);
-            Assert.assertEquals("Not expected commit number of TestXAResource", assertCommitted, committedAsInt);
-            Assert.assertEquals("Not expected rollback number of TestXAResource", assertRolledback, rolledbackAsInt);
-        } catch (Exception e) {
-            throw new IllegalStateException("Cannot proceed with HTTP call to find number of committed/rolledback TestXAResources", e);
-        }
     }
 }
