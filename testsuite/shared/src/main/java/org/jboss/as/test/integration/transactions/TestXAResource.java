@@ -23,20 +23,27 @@
 package org.jboss.as.test.integration.transactions;
 
 import org.jboss.logging.Logger;
+import org.jboss.tm.XAResourceWrapper;
 
 import javax.transaction.xa.XAException;
 import javax.transaction.xa.XAResource;
 import javax.transaction.xa.Xid;
-import java.util.ArrayList;
-import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Test {@link XAResource} class.
- *
- * @author Ondra Chaloupka <ochaloup@redhat.com>
+ * <p>
+ *     {@link XAResource} class that could be used in various transaction test scenarios.
+ *     If you need a persistent variant of the resource consider {@link PersistentTestXAResource}.
+ * </p>
+ * <p>
+ * <b>WARN:</b> when this resource is used in the test then it's needed to put the {@link XAResourceWrapper}
+ * to classpath. It can be done to adjust {@code MANIFIEST.MF} with transaction spi like
+ * {@code .addAsManifestResource(new StringAsset("Dependencies: org.jboss.jboss-transaction-spi\n"), "MANIFEST.MF")}.
+ * </p>
  */
-public class TestXAResource implements XAResource {
-    private static Logger log = Logger.getLogger(TestXAResource.class);
+public class TestXAResource implements XAResource, XAResourceWrapper {
+    private static final Logger log = Logger.getLogger(TestXAResource.class);
 
     public enum TestAction {
         NONE,
@@ -46,11 +53,11 @@ public class TestXAResource implements XAResource {
     }
 
     // prepared xids are shared over all the TestXAResource instances in the JVM
-    // used for the recovery purposes as the XAResourceRecoveryHelper works with a different instance
-    // of the XAResource than the one which is used during 2PC processing
-    private static final List<Xid> preparedXids = new ArrayList<>();
+    // this is an global in-VM storage as the recovery processing (XAResourceRecoveryHelper) creates a brand new XAResource
+    // and this recovery purpose resource needs to access the list of the prepared Xids
+    private static final Map<Xid,Xid> preparedXids = new ConcurrentHashMap<>();
 
-    private TransactionCheckerSingleton checker;
+    private final TransactionCheckerSingleton checker;
     private int transactionTimeout;
 
     protected TestAction testAction;
@@ -91,7 +98,7 @@ public class TestXAResource implements XAResource {
                 Runtime.getRuntime().halt(0);
             case NONE:
             default:
-                preparedXids.add(xid);
+                preparedXids.put(xid, xid);
                 return XAResource.XA_OK;
         }
     }
@@ -149,7 +156,7 @@ public class TestXAResource implements XAResource {
     @Override
     public Xid[] recover(int flag) throws XAException {
         log.debugf("recover with flags: %s", flag);
-        return preparedXids.toArray(new Xid[0]);
+        return preparedXids.values().toArray(new Xid[0]);
     }
 
     @Override
@@ -164,7 +171,33 @@ public class TestXAResource implements XAResource {
         log.debugf("start xid: [%s], flags: %s", xid, flags);
     }
 
-    public List<Xid> getPreparedXids() {
+    /**
+     * Returns modifiable list of the in-VM prepared Xids.
+     *
+     * @return list of prepared Xids
+     */
+    static Map<Xid,Xid> getPreparedXids() {
         return preparedXids;
+    }
+
+    // implementation of the org.jboss.tm.XAResourceWrapper
+    @Override
+    public XAResource getResource() {
+        throw new UnsupportedOperationException("Not implemented");
+    }
+
+    @Override
+    public String getProductName() {
+        return "WildFly Testsuite";
+    }
+
+    @Override
+    public String getProductVersion() {
+        return "WildFly";
+    }
+
+    @Override
+    public String getJndiName() {
+        return TestXAResource.class.getSimpleName();
     }
 }

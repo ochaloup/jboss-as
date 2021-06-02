@@ -25,7 +25,6 @@ import javax.enterprise.context.ApplicationScoped;
 import javax.inject.Inject;
 import javax.transaction.TransactionManager;
 import javax.transaction.Transactional;
-import javax.transaction.xa.XAResource;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 
@@ -36,15 +35,13 @@ public class TransactionRecoveryEndPoint {
     private TransactionManager tm;
 
     @GET
-    @Path("run")
+    @Path("transactionCallPrepareAndCrash")
     @Transactional
-    public String run() throws Exception {
-        XAResource xaResource1 = new TestXAResource(TestXAResource.TestAction.COMMIT_CRASH_VM);
-        XAResource xaResource2 = new PersistentTestXAResource();
+    public String transactionCallPrepareAndCrash() throws Exception {
+        tm.getTransaction().enlistResource( // on 2PC prepares the resource and then crash, recovery should go with rollback
+                new PersistentTestXAResource(PersistentTestXAResource.PersistentTestAction.AFTER_PREPARE_CRASH_JVM));
+        tm.getTransaction().enlistResource(new TestXAResource()); // need second resource to process with 2PC
 
-        tm.getTransaction().enlistResource(xaResource1);
-        tm.getTransaction().enlistResource(xaResource2);
-
-        return "go";
+        return "never returned value";
     }
 }
