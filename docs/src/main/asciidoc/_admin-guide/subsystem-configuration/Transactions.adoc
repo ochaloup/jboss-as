@@ -153,6 +153,23 @@ model attributes are configured under `coordinator-environment` XML element
 </subsystem>
 ----
 
+After subsystem configures attribute `statistics-enabled` then Narayana starts gathering
+statistics about transaction processing. User can see these statistics by listing
+particular attribute or list all statistics attributes as a group.
+Transaction statistics attributes are runtime only attributes.
+
+.printing all transaction statistics attributes
+[source,sh]
+----
+# connect to a running application server
+./bin/jboss-cli.sh -c
+
+# enable transaction statistics
+/subsystem=transactions:write-attribute(name=statistics-enabled, value=true)
+# list all statistics attributes
+/subsystem=transactions:read-attribute-group(name=transaction-statistics, include-runtime=true)
+----
+
 [#object-store]
 === object-store
 
